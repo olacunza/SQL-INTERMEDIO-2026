@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sesión 3 - Diseño para Performance</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #1a1a2e;
+            color: #eee;
+            line-height: 1.6;
+        }
+        h1, h2, h3 {
+            color: #00d4ff;
+        }
+        h1 {
+            text-align: center;
+            border-bottom: 3px solid #00d4ff;
+            padding-bottom: 15px;
+        }
+        .section {
+            background: #16213e;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            border-left: 4px solid #00d4ff;
+        }
+        .warning {
+            background: #3d1f1f;
+            border-left: 4px solid #ff4757;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .tip {
+            background: #1f3d1f;
+            border-left: 4px solid #2ed573;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .bancario {
+            background: #3d3d1f;
+            border-left: 4px solid #ffa502;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        code {
+            background: #0d0d0d;
+            padding: 2px 8px;
+            border-radius: 4px;
+            color: #2ed573;
+            font-family: 'Consolas', monospace;
+        }
+        pre {
+            background: #0d0d0d;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            color: #2ed573;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border: 1px solid #444;
+        }
+        th {
+            background: #00d4ff;
+            color: #1a1a2e;
+        }
+        tr:nth-child(even) {
+            background: #0f3460;
+        }
+        .agenda {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+        .agenda-item {
+            background: #0f3460;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .agenda-item span {
+            display: block;
+            color: #00d4ff;
+            font-size: 0.9em;
+        }
+        .comparison {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .bad {
+            background: #3d1f1f;
+            padding: 15px;
+            border-radius: 8px;
+            border: 2px solid #ff4757;
+        }
+        .good {
+            background: #1f3d1f;
+            padding: 15px;
+            border-radius: 8px;
+            border: 2px solid #2ed573;
+        }
+        .bad h4, .good h4 {
+            margin-top: 0;
+        }
+        .bad h4 { color: #ff4757; }
+        .good h4 { color: #2ed573; }
+        .bytes {
+            font-size: 0.85em;
+            color: #ffa502;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>⚡ Sesión 3: Diseño para Performance</h1>
+    <p style="text-align: center; font-size: 1.2em;">SQL Server Intermedio - Semana 2 | Enfoque: Minimizar CPU y RAM</p>
+
+    <!-- AGENDA -->
+    <div class="section">
+        <h2>📋 Agenda de la Sesión (45 min)</h2>
+        <div class="agenda">
+            <div class="agenda-item">
+                <span>12 min</span>
+                <strong>Tipos de Datos Óptimos</strong>
+            </div>
+            <div class="agenda-item">
+                <span>18 min</span>
+                <strong>SARGability</strong>
+            </div>
+            <div class="agenda-item">
+                <span>10 min</span>
+                <strong>Funciones en WHERE</strong>
+            </div>
+            <div class="agenda-item">
+                <span>5 min</span>
+                <strong>Patrones Correctos</strong>
+            </div>
+        </div>
+    </div>
+
+    <!-- OBJETIVOS -->
+    <div class="section">
+        <h2>🎯 Objetivos de Aprendizaje</h2>
+        <ul>
+            <li>Seleccionar el tipo de dato correcto para cada columna</li>
+            <li>Entender qué es SARGability y por qué es crítico para índices</li>
+            <li>Identificar y corregir consultas no-SARGable</li>
+            <li>Evitar funciones que destruyen el rendimiento en WHERE</li>
+            <li>Aplicar patrones correctos en sistemas de alto volumen</li>
+        </ul>
+    </div>
+
+    <!-- TIPOS DE DATOS -->
+    <div class="section">
+        <h2>1️⃣ Tipos de Datos Óptimos</h2>
+        
+        <p>Cada byte cuenta. Una tabla de 10 millones de filas con tipos incorrectos puede desperdiciar <strong>gigabytes</strong> de espacio y memoria.</p>
+
+        <h3>Regla de Oro: Usar el tipo más pequeño que cumpla el requisito</h3>
+
+        <table>
+            <tr>
+                <th>Dato</th>
+                <th>❌ Tipo Malo</th>
+                <th>✅ Tipo Óptimo</th>
+                <th>Ahorro</th>
+            </tr>
+            <tr>
+                <td>Edad (0-150)</td>
+                <td>INT <span class="bytes">(4 bytes)</span></td>
+                <td>TINYINT <span class="bytes">(1 byte)</span></td>
+                <td>75%</td>
+            </tr>
+            <tr>
+                <td>Cantidad productos</td>
+                <td>BIGINT <span class="bytes">(8 bytes)</span></td>
+                <td>SMALLINT <span class="bytes">(2 bytes)</span></td>
+                <td>75%</td>
+            </tr>
+            <tr>
+                <td>Monto hasta 999,999.99</td>
+                <td>FLOAT <span class="bytes">(8 bytes)</span></td>
+                <td>DECIMAL(9,2) <span class="bytes">(5 bytes)</span></td>
+                <td>37% + precisión</td>
+            </tr>
+            <tr>
+                <td>Código país (2 chars)</td>
+                <td>NVARCHAR(50) <span class="bytes">(hasta 102 bytes)</span></td>
+                <td>CHAR(2) <span class="bytes">(2 bytes)</span></td>
+                <td>98%</td>
+            </tr>
+            <tr>
+                <td>Nombre (máx 50)</td>
+                <td>NVARCHAR(MAX) <span class="bytes">(variable)</span></td>
+                <td>NVARCHAR(50) <span class="bytes">(hasta 102 bytes)</span></td>
+                <td>Evita LOB</td>
+            </tr>
+            <tr>
+                <td>Fecha sin hora</td>
+                <td>DATETIME <span class="bytes">(8 bytes)</span></td>
+                <td>DATE <span class="bytes">(3 bytes)</span></td>
+                <td>62%</td>
+            </tr>
+            <tr>
+                <td>Sí/No</td>
+                <td>VARCHAR(10) <span class="bytes">(hasta 12 bytes)</span></td>
+                <td>BIT <span class="bytes">(1 bit)</span></td>
+                <td>~99%</td>
+            </tr>
+        </table>
+
+        <h3>Referencia de Tamaños de Enteros</h3>
+        <table>
+            <tr>
+                <th>Tipo</th>
+                <th>Bytes</th>
+                <th>Rango</th>
+                <th>Uso Típico</th>
+            </tr>
+            <tr>
+                <td>TINYINT</td>
+                <td>1</td>
+                <td>0 a 255</td>
+                <td>Edad, estado, tipo</td>
+            </tr>
+            <tr>
+                <td>SMALLINT</td>
+                <td>2</td>
+                <td>-32,768 a 32,767</td>
+                <td>Cantidades, códigos</td>
+            </tr>
+            <tr>
+                <td>INT</td>
+                <td>4</td>
+                <td>-2.1 mil millones a 2.1 mil millones</td>
+                <td>IDs, contadores</td>
+            </tr>
+            <tr>
+                <td>BIGINT</td>
+                <td>8</td>
+                <td>±9.2 x 10^18</td>
+                <td>Solo cuando INT no alcanza</td>
+            </tr>
+        </table>
+
+        <div class="warning">
+            <strong>⚠️ Errores Comunes:</strong>
+            <ul>
+                <li><strong>NVARCHAR vs VARCHAR:</strong> NVARCHAR usa 2 bytes por carácter (Unicode). Usar solo si necesitas caracteres especiales/internacionales.</li>
+                <li><strong>VARCHAR(MAX):</strong> Almacena fuera de página (LOB). Evitar para campos que tienen límite conocido.</li>
+                <li><strong>FLOAT/REAL para dinero:</strong> ¡NUNCA! Tienen errores de redondeo. Usar DECIMAL.</li>
+            </ul>
+        </div>
+
+        <h3>Cálculo de Impacto</h3>
+        <pre>
+-- Tabla de transacciones: 50 millones de registros
+-- Diferencia entre INT (4 bytes) y SMALLINT (2 bytes) en 3 columnas:
+
+Ahorro por fila: 3 columnas × 2 bytes = 6 bytes
+Ahorro total: 50,000,000 × 6 bytes = 300 MB
+
+-- Esto significa:
+-- ✓ 300 MB menos en disco
+-- ✓ 300 MB menos en memoria (Buffer Pool)
+-- ✓ Más filas por página = menos I/O
+-- ✓ Índices más compactos = búsquedas más rápidas
+        </pre>
+
+        <div class="bancario">
+            <strong>🏦 Caso Bancario:</strong>
+            <p>Una tabla de TRANSACCIONES con 100 millones de registros:</p>
+            <ul>
+                <li>Cambiar DATETIME a DATE (solo fecha): ahorra 500 MB</li>
+                <li>Cambiar BIGINT a INT en IDs: ahorra 400 MB</li>
+                <li>El Buffer Pool (RAM) trabaja más eficientemente</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- SARGABILITY -->
+    <div class="section">
+        <h2>2️⃣ SARGability (Search ARGument ABLE)</h2>
+        
+        <p>Una consulta es <strong>SARGable</strong> cuando puede usar un índice para hacer búsqueda eficiente (Index Seek). Si NO es SARGable, SQL Server debe leer TODA la tabla (Table/Index Scan).</p>
+
+        <div class="diagram" style="background: #0d0d0d; padding: 20px; border-radius: 10px; margin: 20px 0; text-align: center;">
+            <pre style="color: #00d4ff;">
+┌─────────────────────────────────────────────────────────────────┐
+│                     ¿QUÉ ES SARGABLE?                           │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  SARGABLE = El predicado WHERE puede usar un INDEX SEEK         │
+│                                                                 │
+│  ✅ WHERE Columna = valor         → Index Seek (rápido)         │
+│  ✅ WHERE Columna > valor         → Index Seek (rápido)         │
+│  ✅ WHERE Columna LIKE 'abc%'     → Index Seek (rápido)         │
+│                                                                 │
+│  ❌ WHERE FUNCIÓN(Columna) = x    → Index Scan (lento)          │
+│  ❌ WHERE Columna LIKE '%abc'     → Index Scan (lento)          │
+│  ❌ WHERE Col1 + Col2 = valor     → Index Scan (lento)          │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+            </pre>
+        </div>
+
+        <h3>Index Seek vs Index Scan</h3>
+        <table>
+            <tr>
+                <th>Aspecto</th>
+                <th>Index Seek</th>
+                <th>Index Scan</th>
+            </tr>
+            <tr>
+                <td>Cómo funciona</td>
+                <td>Va directo a las filas necesarias</td>
+                <td>Lee TODAS las filas del índice</td>
+            </tr>
+            <tr>
+                <td>Analogía</td>
+                <td>Buscar página en el índice del libro</td>
+                <td>Leer todo el libro para encontrar algo</td>
+            </tr>
+            <tr>
+                <td>Lecturas lógicas</td>
+                <td>Pocas (solo lo necesario)</td>
+                <td>Muchas (todo el índice)</td>
+            </tr>
+            <tr>
+                <td>CPU</td>
+                <td>Bajo</td>
+                <td>Alto</td>
+            </tr>
+            <tr>
+                <td>Ejemplo</td>
+                <td>3 lecturas para 10 filas</td>
+                <td>50,000 lecturas para 10 filas</td>
+            </tr>
+        </table>
+
+        <h3>Ejemplos de Consultas SARGable y No-SARGable</h3>
+
+        <div class="comparison">
+            <div class="bad">
+                <h4>❌ NO SARGABLE</h4>
+                <pre>
+-- Función en columna
+WHERE YEAR(FechaTransaccion) = 2025
+
+-- Concatenación
+WHERE Nombre + Apellido = 'JuanPerez'
+
+-- Conversión implícita
+WHERE CAST(CodigoCliente AS VARCHAR) = '12345'
+
+-- LIKE con comodín al inicio
+WHERE Email LIKE '%@gmail.com'
+
+-- Negación
+WHERE NOT Estado = 'Activo'
+
+-- Operación aritmética
+WHERE Precio * 1.18 > 1000
+                </pre>
+            </div>
+            <div class="good">
+                <h4>✅ SARGABLE</h4>
+                <pre>
+-- Rango de fechas
+WHERE FechaTransaccion >= '2025-01-01'
+  AND FechaTransaccion < '2026-01-01'
+
+-- Columnas separadas
+WHERE Nombre = 'Juan' AND Apellido = 'Perez'
+
+-- Sin conversión
+WHERE CodigoCliente = 12345
+
+-- LIKE con comodín al final
+WHERE Email LIKE 'juan%'
+
+-- Positivo
+WHERE Estado IN ('Inactivo', 'Pendiente')
+
+-- Mover operación al otro lado
+WHERE Precio > 1000 / 1.18
+                </pre>
+            </div>
+        </div>
+
+        <div class="tip">
+            <strong>💡 Regla de Oro SARGable:</strong>
+            <p>La columna indexada debe estar <strong>SOLA</strong> en un lado de la comparación, sin funciones ni operaciones.</p>
+            <pre>
+✅ columna = valor
+✅ columna > valor
+✅ columna BETWEEN valor1 AND valor2
+❌ FUNCION(columna) = valor
+❌ columna + algo = valor
+            </pre>
+        </div>
+    </div>
+
+    <!-- FUNCIONES EN WHERE -->
+    <div class="section">
+        <h2>3️⃣ Impacto de Funciones en el WHERE</h2>
+        
+        <p>Cada función aplicada a una columna en el WHERE <strong>destruye</strong> la posibilidad de usar un índice.</p>
+
+        <h3>Funciones Problemáticas y sus Soluciones</h3>
+        
+        <table>
+            <tr>
+                <th>Función Problemática</th>
+                <th>Solución SARGable</th>
+            </tr>
+            <tr>
+                <td><code>WHERE YEAR(Fecha) = 2025</code></td>
+                <td><code>WHERE Fecha >= '2025-01-01' AND Fecha < '2026-01-01'</code></td>
+            </tr>
+            <tr>
+                <td><code>WHERE MONTH(Fecha) = 3</code></td>
+                <td><code>WHERE Fecha >= '2025-03-01' AND Fecha < '2025-04-01'</code></td>
+            </tr>
+            <tr>
+                <td><code>WHERE DATEPART(dw, Fecha) = 1</code></td>
+                <td>Columna calculada persistida o tabla de fechas</td>
+            </tr>
+            <tr>
+                <td><code>WHERE LEFT(Codigo, 3) = 'ABC'</code></td>
+                <td><code>WHERE Codigo LIKE 'ABC%'</code></td>
+            </tr>
+            <tr>
+                <td><code>WHERE UPPER(Nombre) = 'JUAN'</code></td>
+                <td>Collation CI (case insensitive) o columna calculada</td>
+            </tr>
+            <tr>
+                <td><code>WHERE ISNULL(Campo, 0) = 0</code></td>
+                <td><code>WHERE Campo IS NULL OR Campo = 0</code></td>
+            </tr>
+            <tr>
+                <td><code>WHERE CONVERT(DATE, FechaHora) = '2025-03-20'</code></td>
+                <td><code>WHERE FechaHora >= '2025-03-20' AND FechaHora < '2025-03-21'</code></td>
+            </tr>
+            <tr>
+                <td><code>WHERE DATEDIFF(DAY, Fecha, GETDATE()) < 30</code></td>
+                <td><code>WHERE Fecha > DATEADD(DAY, -30, GETDATE())</code></td>
+            </tr>
+        </table>
+
+        <h3>Ejemplo Detallado: Búsqueda por Año</h3>
+        <div class="comparison">
+            <div class="bad">
+                <h4>❌ MAL: Función en columna</h4>
+                <pre>
+SELECT * FROM TRANSACCIONES
+WHERE YEAR(Fecha) = 2025
+  AND MONTH(Fecha) = 3;
+
+-- Execution Plan: INDEX SCAN
+-- Logical Reads: 125,000
+-- CPU Time: 2,500 ms
+                </pre>
+            </div>
+            <div class="good">
+                <h4>✅ BIEN: Rango de fechas</h4>
+                <pre>
+SELECT * FROM TRANSACCIONES
+WHERE Fecha >= '2025-03-01'
+  AND Fecha < '2025-04-01';
+
+-- Execution Plan: INDEX SEEK
+-- Logical Reads: 45
+-- CPU Time: 15 ms
+                </pre>
+            </div>
+        </div>
+
+        <h3>Conversiones Implícitas (El Asesino Silencioso)</h3>
+        <p>SQL Server convierte automáticamente tipos de datos, pero esto puede destruir SARGability:</p>
+
+        <pre>
+-- La columna CodigoCliente es VARCHAR(10)
+
+❌ WHERE CodigoCliente = 12345  
+   -- SQL convierte TODOS los valores de la columna a INT
+   -- Resultado: Index Scan
+
+✅ WHERE CodigoCliente = '12345'
+   -- No hay conversión
+   -- Resultado: Index Seek
+        </pre>
+
+        <div class="warning">
+            <strong>⚠️ Regla de Precedencia de Tipos:</strong>
+            <p>SQL Server siempre convierte al tipo de mayor precedencia:</p>
+            <code>INT > VARCHAR</code> → Si comparas VARCHAR con INT, convierte TODO el VARCHAR a INT
+            <p>Esto significa que <strong>cada fila</strong> debe convertirse antes de comparar = SCAN.</p>
+        </div>
+    </div>
+
+    <!-- PATRONES CORRECTOS -->
+    <div class="section">
+        <h2>4️⃣ Patrones Correctos para Performance</h2>
+
+        <h3>Patrón 1: Columnas Calculadas Persistidas</h3>
+        <p>Cuando necesitas filtrar frecuentemente por una función, crea una columna calculada:</p>
+        <pre>
+-- Agregar columna calculada PERSISTIDA
+ALTER TABLE TRANSACCIONES
+ADD FechaAnio AS YEAR(Fecha) PERSISTED;
+
+-- Crear índice en la columna calculada
+CREATE INDEX IX_Trans_FechaAnio ON TRANSACCIONES(FechaAnio);
+
+-- Ahora SÍ es SARGable
+SELECT * FROM TRANSACCIONES WHERE FechaAnio = 2025;
+        </pre>
+
+        <h3>Patrón 2: Tabla de Fechas (Date Dimension)</h3>
+        <pre>
+-- Crear tabla de fechas
+CREATE TABLE DIM_FECHAS (
+    Fecha DATE PRIMARY KEY,
+    Anio SMALLINT,
+    Mes TINYINT,
+    Dia TINYINT,
+    DiaSemana TINYINT,
+    EsFinDeSemana BIT,
+    EsFeriado BIT
+);
+
+-- Usar con JOIN en lugar de funciones
+SELECT T.*
+FROM TRANSACCIONES T
+JOIN DIM_FECHAS F ON T.Fecha = F.Fecha
+WHERE F.Anio = 2025 AND F.Mes = 3;
+        </pre>
+
+        <h3>Patrón 3: Búsqueda de Texto Parcial</h3>
+        <pre>
+-- Si necesitas buscar "contiene" frecuentemente:
+
+-- Opción A: Full-Text Index
+CREATE FULLTEXT INDEX ON Productos(Descripcion) 
+KEY INDEX PK_Productos;
+
+SELECT * FROM Productos 
+WHERE CONTAINS(Descripcion, 'laptop');
+
+-- Opción B: Columna calculada para prefijo
+ALTER TABLE Clientes
+ADD EmailDominio AS RIGHT(Email, LEN(Email) - CHARINDEX('@', Email)) PERSISTED;
+
+CREATE INDEX IX_EmailDominio ON Clientes(EmailDominio);
+        </pre>
+
+        <div class="bancario">
+            <strong>🏦 Caso Bancario - Búsqueda de Transacciones:</strong>
+            <pre>
+-- ❌ Mal: Buscar transacciones de los últimos 30 días
+WHERE DATEDIFF(DAY, FechaTransaccion, GETDATE()) <= 30
+
+-- ✅ Bien: Pre-calcular la fecha límite
+DECLARE @FechaLimite DATE = DATEADD(DAY, -30, GETDATE());
+WHERE FechaTransaccion >= @FechaLimite
+
+-- ✅ Mejor aún: Parámetros pre-calculados
+-- El optimizador puede estimar mejor las filas
+            </pre>
+        </div>
+    </div>
+
+    <!-- DEMO -->
+    <div class="section">
+        <h2>🧪 Ejercicios Prácticos</h2>
+        <p>Ver el archivo <code>Scripts/1. Diseno_Performance.sql</code> para:</p>
+        <ol>
+            <li><strong>Demo Tipos:</strong> Comparar tamaños de diferentes tipos</li>
+            <li><strong>Demo SARGability:</strong> Ver diferencia entre Seek y Scan</li>
+            <li><strong>Demo Funciones:</strong> Medir impacto real en lecturas y CPU</li>
+            <li><strong>Ejercicios:</strong> Corregir consultas problemáticas</li>
+        </ol>
+    </div>
+
+    <!-- RESUMEN -->
+    <div class="section">
+        <h2>📝 Resumen Ejecutivo</h2>
+        <table>
+            <tr>
+                <th>Concepto</th>
+                <th>Qué Recordar</th>
+            </tr>
+            <tr>
+                <td>Tipos de Datos</td>
+                <td>Usar el tipo más pequeño que cumpla el requisito. TINYINT < SMALLINT < INT < BIGINT</td>
+            </tr>
+            <tr>
+                <td>SARGable</td>
+                <td>Columna SOLA = valor. Sin funciones ni operaciones en la columna.</td>
+            </tr>
+            <tr>
+                <td>Funciones en WHERE</td>
+                <td>Destruyen índices. Reemplazar por rangos o columnas calculadas.</td>
+            </tr>
+            <tr>
+                <td>YEAR()/MONTH()</td>
+                <td>Reemplazar por rangos: >= fecha_inicio AND < fecha_fin</td>
+            </tr>
+            <tr>
+                <td>Conversiones</td>
+                <td>Evitar conversiones implícitas. Comparar tipos iguales.</td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- TAREA -->
+    <div class="section">
+        <h2>📚 Tarea para la Próxima Sesión</h2>
+        <ol>
+            <li>Revisar 5 consultas frecuentes en tu trabajo e identificar si son SARGable</li>
+            <li>Verificar tipos de datos de tus tablas principales con <code>sp_help 'tabla'</code></li>
+            <li>Medir las lecturas lógicas de tus consultas con SET STATISTICS IO ON</li>
+            <li>Investigar: ¿Qué es un Key Lookup y cómo afecta al rendimiento?</li>
+        </ol>
+    </div>
+
+    <footer style="text-align: center; margin-top: 30px; padding: 20px; border-top: 1px solid #444;">
+        <p>SQL Server Intermedio - Sesión 3 | © 2026</p>
+    </footer>
+
+</body>
+</html>

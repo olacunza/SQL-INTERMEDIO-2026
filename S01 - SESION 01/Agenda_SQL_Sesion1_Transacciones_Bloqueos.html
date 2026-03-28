@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sesión 1 - Transacciones y Bloqueos</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #1a1a2e;
+            color: #eee;
+            line-height: 1.6;
+        }
+        h1, h2, h3 {
+            color: #00d4ff;
+        }
+        h1 {
+            text-align: center;
+            border-bottom: 3px solid #00d4ff;
+            padding-bottom: 15px;
+        }
+        .section {
+            background: #16213e;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            border-left: 4px solid #00d4ff;
+        }
+        .warning {
+            background: #3d1f1f;
+            border-left: 4px solid #ff4757;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .tip {
+            background: #1f3d1f;
+            border-left: 4px solid #2ed573;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .bancario {
+            background: #3d3d1f;
+            border-left: 4px solid #ffa502;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        code {
+            background: #0d0d0d;
+            padding: 2px 8px;
+            border-radius: 4px;
+            color: #2ed573;
+            font-family: 'Consolas', monospace;
+        }
+        pre {
+            background: #0d0d0d;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            color: #2ed573;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border: 1px solid #444;
+        }
+        th {
+            background: #00d4ff;
+            color: #1a1a2e;
+        }
+        tr:nth-child(even) {
+            background: #0f3460;
+        }
+        .agenda {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+        .agenda-item {
+            background: #0f3460;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .agenda-item span {
+            display: block;
+            color: #00d4ff;
+            font-size: 0.9em;
+        }
+        .diagram {
+            text-align: center;
+            padding: 20px;
+            background: #0d0d0d;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        .emoji {
+            font-size: 1.5em;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🔒 Sesión 1: Transacciones y Bloqueos</h1>
+    <p style="text-align: center; font-size: 1.2em;">SQL Server Intermedio - Semana 1 | Enfoque: Integridad Financiera Bancaria</p>
+
+    <!-- AGENDA -->
+    <div class="section">
+        <h2>📋 Agenda de la Sesión (45 min)</h2>
+        <div class="agenda">
+            <div class="agenda-item">
+                <span>10 min</span>
+                <strong>Propiedades ACID</strong>
+            </div>
+            <div class="agenda-item">
+                <span>15 min</span>
+                <strong>Niveles de Aislamiento</strong>
+            </div>
+            <div class="agenda-item">
+                <span>10 min</span>
+                <strong>Deadlocks</strong>
+            </div>
+            <div class="agenda-item">
+                <span>10 min</span>
+                <strong>NOLOCK vs RCSI</strong>
+            </div>
+        </div>
+    </div>
+
+    <!-- OBJETIVOS -->
+    <div class="section">
+        <h2>🎯 Objetivos de Aprendizaje</h2>
+        <ul>
+            <li>Comprender las propiedades ACID y su importancia en sistemas financieros</li>
+            <li>Dominar los 4 niveles de aislamiento de SQL Server</li>
+            <li>Identificar, diagnosticar y prevenir Deadlocks</li>
+            <li>Elegir correctamente entre <code>NOLOCK</code> y <code>READ COMMITTED SNAPSHOT</code></li>
+        </ul>
+    </div>
+
+    <!-- ACID -->
+    <div class="section">
+        <h2>1️⃣ Propiedades ACID</h2>
+        <p>Las transacciones en SQL Server garantizan las propiedades <strong>ACID</strong>:</p>
+        
+        <table>
+            <tr>
+                <th>Propiedad</th>
+                <th>Significado</th>
+                <th>Ejemplo Bancario</th>
+            </tr>
+            <tr>
+                <td><code>A</code> - Atomicidad</td>
+                <td>Todo o nada. Si una parte falla, todo se revierte.</td>
+                <td>Transferencia: Si el débito pasa pero el crédito falla, ambos se revierten.</td>
+            </tr>
+            <tr>
+                <td><code>C</code> - Consistencia</td>
+                <td>La DB pasa de un estado válido a otro estado válido.</td>
+                <td>El saldo total del banco antes y después de la transferencia es igual.</td>
+            </tr>
+            <tr>
+                <td><code>I</code> - Aislamiento</td>
+                <td>Las transacciones concurrentes no se "ven" entre sí.</td>
+                <td>Dos cajeros no pueden retirar el mismo saldo simultáneamente.</td>
+            </tr>
+            <tr>
+                <td><code>D</code> - Durabilidad</td>
+                <td>Una vez confirmado (COMMIT), los datos persisten.</td>
+                <td>Si el sistema cae después del COMMIT, el depósito está registrado.</td>
+            </tr>
+        </table>
+
+        <div class="bancario">
+            <strong>🏦 Caso Bancario Real:</strong> En una transferencia interbancaria de S/. 5,000:
+            <ol>
+                <li><strong>Atomicidad:</strong> Si el Banco A debita pero el Banco B no puede acreditar → ROLLBACK total</li>
+                <li><strong>Consistencia:</strong> La suma de todas las cuentas debe ser igual antes y después</li>
+                <li><strong>Aislamiento:</strong> Mientras se procesa, nadie más puede modificar esas cuentas</li>
+                <li><strong>Durabilidad:</strong> El registro queda en el log aunque se apague el servidor</li>
+            </ol>
+        </div>
+
+        <h3>Sintaxis Básica de Transacciones</h3>
+        <pre>
+BEGIN TRANSACTION;  -- Inicia la transacción
+
+    -- Operaciones DML aquí
+    UPDATE CUENTAS SET SALDO = SALDO - 5000 WHERE CUENTAID = 101;
+    UPDATE CUENTAS SET SALDO = SALDO + 5000 WHERE CUENTAID = 202;
+
+    -- Si todo está bien
+    IF @@ERROR = 0
+        COMMIT TRANSACTION;  -- Confirma cambios
+    ELSE
+        ROLLBACK TRANSACTION; -- Revierte todo
+        </pre>
+    </div>
+
+    <!-- NIVELES DE AISLAMIENTO -->
+    <div class="section">
+        <h2>2️⃣ Niveles de Aislamiento (Isolation Levels)</h2>
+        <p>SQL Server ofrece <strong>5 niveles de aislamiento</strong> que controlan cómo las transacciones interactúan entre sí:</p>
+
+        <table>
+            <tr>
+                <th>Nivel</th>
+                <th>Dirty Read</th>
+                <th>Non-Repeatable Read</th>
+                <th>Phantom Read</th>
+                <th>Performance</th>
+            </tr>
+            <tr>
+                <td><code>READ UNCOMMITTED</code></td>
+                <td>✅ Permitido</td>
+                <td>✅ Permitido</td>
+                <td>✅ Permitido</td>
+                <td>⚡ Más rápido</td>
+            </tr>
+            <tr>
+                <td><code>READ COMMITTED</code> (default)</td>
+                <td>❌ Bloqueado</td>
+                <td>✅ Permitido</td>
+                <td>✅ Permitido</td>
+                <td>⚡⚡</td>
+            </tr>
+            <tr>
+                <td><code>REPEATABLE READ</code></td>
+                <td>❌ Bloqueado</td>
+                <td>❌ Bloqueado</td>
+                <td>✅ Permitido</td>
+                <td>⚡⚡⚡</td>
+            </tr>
+            <tr>
+                <td><code>SERIALIZABLE</code></td>
+                <td>❌ Bloqueado</td>
+                <td>❌ Bloqueado</td>
+                <td>❌ Bloqueado</td>
+                <td>🐢 Más lento</td>
+            </tr>
+            <tr>
+                <td><code>SNAPSHOT</code></td>
+                <td>❌ Bloqueado</td>
+                <td>❌ Bloqueado</td>
+                <td>❌ Bloqueado</td>
+                <td>⚡⚡ (usa TempDB)</td>
+            </tr>
+        </table>
+
+        <h3>Definiciones de los Problemas</h3>
+        <ul>
+            <li><strong>Dirty Read:</strong> Leer datos que otra transacción aún no ha confirmado (puede revertirse)</li>
+            <li><strong>Non-Repeatable Read:</strong> Leer el mismo dato dos veces y obtener valores diferentes</li>
+            <li><strong>Phantom Read:</strong> Ejecutar la misma consulta y obtener filas adicionales o faltantes</li>
+        </ul>
+
+        <div class="warning">
+            <strong>⚠️ Importante:</strong> En un sistema bancario, <code>READ UNCOMMITTED</code> está <strong>PROHIBIDO</strong> 
+            para operaciones financieras. ¡Podrías leer un saldo que nunca existió!
+        </div>
+
+        <h3>Cómo Cambiar el Nivel de Aislamiento</h3>
+        <pre>
+-- Cambiar a nivel de sesión
+SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+
+-- Verificar nivel actual
+SELECT 
+    CASE transaction_isolation_level 
+        WHEN 0 THEN 'Unspecified' 
+        WHEN 1 THEN 'ReadUncommitted' 
+        WHEN 2 THEN 'ReadCommitted' 
+        WHEN 3 THEN 'RepeatableRead' 
+        WHEN 4 THEN 'Serializable' 
+        WHEN 5 THEN 'Snapshot' 
+    END AS IsolationLevel
+FROM sys.dm_exec_sessions 
+WHERE session_id = @@SPID;
+        </pre>
+    </div>
+
+    <!-- DEADLOCKS -->
+    <div class="section">
+        <h2>3️⃣ Deadlocks (Interbloqueos)</h2>
+        
+        <div class="diagram">
+            <p style="color: #ff4757; font-size: 1.3em;"><strong>¿Qué es un Deadlock?</strong></p>
+            <p>Cuando dos transacciones se bloquean mutuamente esperando recursos que la otra tiene.</p>
+            <pre style="color: #ff4757;">
+    Transacción A                    Transacción B
+         │                                │
+         ▼                                ▼
+    Bloquea Tabla X              Bloquea Tabla Y
+         │                                │
+         ▼                                ▼
+    Espera Tabla Y  ◄──────────►  Espera Tabla X
+         │                                │
+         └────────── DEADLOCK! ───────────┘
+            </pre>
+        </div>
+
+        <h3>Ejemplo Clásico de Deadlock Bancario</h3>
+        <pre>
+-- SESIÓN 1: Transferencia de Cuenta A → Cuenta B
+BEGIN TRAN
+    UPDATE CUENTAS SET SALDO = SALDO - 1000 WHERE CUENTAID = 1; -- Bloquea Cuenta 1
+    WAITFOR DELAY '00:00:05'; -- Simula proceso
+    UPDATE CUENTAS SET SALDO = SALDO + 1000 WHERE CUENTAID = 2; -- Espera Cuenta 2
+COMMIT
+
+-- SESIÓN 2: Transferencia de Cuenta B → Cuenta A (ejecutar simultáneamente)
+BEGIN TRAN
+    UPDATE CUENTAS SET SALDO = SALDO - 500 WHERE CUENTAID = 2;  -- Bloquea Cuenta 2
+    WAITFOR DELAY '00:00:05'; -- Simula proceso
+    UPDATE CUENTAS SET SALDO = SALDO + 500 WHERE CUENTAID = 1;  -- Espera Cuenta 1
+COMMIT
+-- ¡DEADLOCK! SQL Server matará una de las dos transacciones.
+        </pre>
+
+        <h3>Estrategias para Prevenir Deadlocks</h3>
+        <table>
+            <tr>
+                <th>Estrategia</th>
+                <th>Descripción</th>
+                <th>Implementación</th>
+            </tr>
+            <tr>
+                <td>Ordenamiento Consistente</td>
+                <td>Acceder a las tablas siempre en el mismo orden</td>
+                <td>Siempre bloquear primero la cuenta con ID menor</td>
+            </tr>
+            <tr>
+                <td>Transacciones Cortas</td>
+                <td>Minimizar el tiempo de bloqueo</td>
+                <td>Hacer cálculos ANTES del BEGIN TRAN</td>
+            </tr>
+            <tr>
+                <td>Usar ROWLOCK</td>
+                <td>Bloquear solo la fila, no la página/tabla</td>
+                <td><code>UPDATE ... WITH (ROWLOCK)</code></td>
+            </tr>
+            <tr>
+                <td>SNAPSHOT Isolation</td>
+                <td>Evitar bloqueos usando versionado</td>
+                <td>Activar RCSI en la base de datos</td>
+            </tr>
+        </table>
+
+        <div class="tip">
+            <strong>💡 Tip Senior:</strong> Siempre accede a las tablas en orden alfabético o por ID.
+            Si todos los SPs hacen UPDATE en el mismo orden (CLIENTES → CUENTAS → TRANSACCIONES), 
+            los deadlocks se reducen drásticamente.
+        </div>
+
+        <h3>Detectar Deadlocks con Extended Events</h3>
+        <pre>
+-- Ver información de deadlocks recientes
+SELECT 
+    XEvent.query('(event/data[@name="xml_report"]/value/deadlock)[1]') AS DeadlockGraph
+FROM (
+    SELECT CAST(target_data AS XML) AS TargetData
+    FROM sys.dm_xe_session_targets st
+    JOIN sys.dm_xe_sessions s ON s.address = st.event_session_address
+    WHERE s.name = 'system_health' AND st.target_name = 'ring_buffer'
+) AS Data
+CROSS APPLY TargetData.nodes('RingBufferTarget/event[@name="xml_deadlock_report"]') AS XEventData(XEvent);
+        </pre>
+    </div>
+
+    <!-- NOLOCK vs RCSI -->
+    <div class="section">
+        <h2>4️⃣ NOLOCK vs READ COMMITTED SNAPSHOT (RCSI)</h2>
+        
+        <h3>¿Qué es NOLOCK?</h3>
+        <pre>
+-- NOLOCK = READ UNCOMMITTED a nivel de tabla
+SELECT * FROM TRANSACCIONES WITH (NOLOCK);
+
+-- Es equivalente a:
+SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+SELECT * FROM TRANSACCIONES;
+        </pre>
+
+        <div class="warning">
+            <strong>⚠️ Peligros de NOLOCK:</strong>
+            <ul>
+                <li><strong>Dirty Reads:</strong> Puedes leer datos que se van a revertir</li>
+                <li><strong>Datos Duplicados:</strong> Puede leer la misma fila dos veces</li>
+                <li><strong>Datos Faltantes:</strong> Puede saltarse filas durante un split de página</li>
+                <li><strong>Datos Inconsistentes:</strong> Leer mitad de una fila actualizada</li>
+            </ul>
+        </div>
+
+        <h3>¿Qué es READ COMMITTED SNAPSHOT (RCSI)?</h3>
+        <p>Es una configuración a nivel de base de datos que permite lecturas sin bloqueos, 
+        pero leyendo la <strong>última versión confirmada</strong> de los datos.</p>
+
+        <pre>
+-- Activar RCSI (requiere acceso exclusivo a la DB)
+ALTER DATABASE MiBancoDB SET READ_COMMITTED_SNAPSHOT ON;
+
+-- Verificar si está activo
+SELECT name, is_read_committed_snapshot_on 
+FROM sys.databases 
+WHERE name = 'MiBancoDB';
+        </pre>
+
+        <h3>Comparación NOLOCK vs RCSI</h3>
+        <table>
+            <tr>
+                <th>Característica</th>
+                <th>NOLOCK</th>
+                <th>RCSI</th>
+            </tr>
+            <tr>
+                <td>Dirty Reads</td>
+                <td>✅ Sí (peligroso)</td>
+                <td>❌ No</td>
+            </tr>
+            <tr>
+                <td>Bloquea escritores</td>
+                <td>❌ No</td>
+                <td>❌ No</td>
+            </tr>
+            <tr>
+                <td>Usa TempDB</td>
+                <td>❌ No</td>
+                <td>✅ Sí (Version Store)</td>
+            </tr>
+            <tr>
+                <td>Requiere cambio en código</td>
+                <td>✅ Sí (cada query)</td>
+                <td>❌ No (a nivel DB)</td>
+            </tr>
+            <tr>
+                <td>Apto para Banca</td>
+                <td>❌ NO</td>
+                <td>✅ SÍ</td>
+            </tr>
+        </table>
+
+        <div class="bancario">
+            <strong>🏦 Recomendación Bancaria:</strong>
+            <ul>
+                <li><strong>Reportes históricos:</strong> RCSI es perfecto (datos ya confirmados)</li>
+                <li><strong>Consulta de saldo en cajero:</strong> RCSI con transacciones cortas</li>
+                <li><strong>NOLOCK:</strong> Solo para dashboards de monitoreo donde no importa la precisión exacta</li>
+                <li><strong>Operaciones críticas:</strong> Usar READ COMMITTED o SERIALIZABLE clásico</li>
+            </ul>
+        </div>
+
+        <h3>Monitorear el Version Store (RCSI)</h3>
+        <pre>
+-- Ver uso del Version Store en TempDB
+SELECT 
+    SUM(version_store_reserved_page_count) * 8 / 1024 AS [Version Store MB]
+FROM sys.dm_db_file_space_usage;
+
+-- Ver transacciones que generan versiones
+SELECT 
+    DB_NAME(database_id) AS DatabaseName,
+    transaction_id,
+    elapsed_time_seconds
+FROM sys.dm_tran_version_store_space_usage
+WHERE elapsed_time_seconds > 60; -- Más de 1 minuto
+        </pre>
+    </div>
+
+    <!-- DEMO -->
+    <div class="section">
+        <h2>🧪 Ejercicios Prácticos</h2>
+        <p>Ver el archivo <code>Scripts/1. Transacciones_Bloqueos.sql</code> para:</p>
+        <ol>
+            <li><strong>Demo ACID:</strong> Transferencia bancaria con ROLLBACK</li>
+            <li><strong>Demo Isolation Levels:</strong> Dirty Reads en acción</li>
+            <li><strong>Demo Deadlock:</strong> Provocar y detectar un deadlock</li>
+            <li><strong>Demo NOLOCK vs RCSI:</strong> Comparación de resultados</li>
+        </ol>
+    </div>
+
+    <!-- RESUMEN -->
+    <div class="section">
+        <h2>📝 Resumen Ejecutivo</h2>
+        <table>
+            <tr>
+                <th>Concepto</th>
+                <th>Qué Recordar</th>
+            </tr>
+            <tr>
+                <td>ACID</td>
+                <td>Las 4 garantías de toda transacción: Atomicidad, Consistencia, Aislamiento, Durabilidad</td>
+            </tr>
+            <tr>
+                <td>Isolation Levels</td>
+                <td>READ COMMITTED es el default. SERIALIZABLE es el más seguro pero más lento.</td>
+            </tr>
+            <tr>
+                <td>Deadlocks</td>
+                <td>Prevenirlos con ordenamiento consistente y transacciones cortas.</td>
+            </tr>
+            <tr>
+                <td>NOLOCK</td>
+                <td>Evitar en sistemas bancarios. Puede dar datos incorrectos.</td>
+            </tr>
+            <tr>
+                <td>RCSI</td>
+                <td>Alternativa segura a NOLOCK. Activar a nivel de DB.</td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- TAREA -->
+    <div class="section">
+        <h2>📚 Tarea para la Próxima Sesión</h2>
+        <ol>
+            <li>Identificar en tu ambiente de trabajo qué nivel de aislamiento usan los SPs críticos</li>
+            <li>Revisar si hay uso de NOLOCK en consultas financieras</li>
+            <li>Verificar si RCSI está activado en la base de datos principal</li>
+            <li>Investigar: ¿Cómo capturar el gráfico XML de un deadlock?</li>
+        </ol>
+    </div>
+
+    <footer style="text-align: center; margin-top: 30px; padding: 20px; border-top: 1px solid #444;">
+        <p>SQL Server Intermedio - Sesión 1 | © 2026</p>
+    </footer>
+
+</body>
+</html>

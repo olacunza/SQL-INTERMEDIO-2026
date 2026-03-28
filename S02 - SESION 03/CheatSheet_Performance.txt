@@ -1,0 +1,221 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║               CHEAT SHEET - DISEÑO PARA PERFORMANCE                          ║
+║                     SQL Server Intermedio - Sesión 3                          ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+═══════════════════════════════════════════════════════════════════════════════
+                           TIPOS DE DATOS NUMÉRICOS
+═══════════════════════════════════════════════════════════════════════════════
+
+┌─────────────┬─────────┬─────────────────────────────┬─────────────────────────┐
+│ Tipo        │ Bytes   │ Rango                       │ Uso Típico              │
+├─────────────┼─────────┼─────────────────────────────┼─────────────────────────┤
+│ TINYINT     │ 1       │ 0 a 255                     │ Edad, ranking, estados  │
+│ SMALLINT    │ 2       │ -32,768 a 32,767            │ Años, cantidades        │
+│ INT         │ 4       │ -2.1MM a 2.1MM              │ IDs, contadores         │
+│ BIGINT      │ 8       │ ±9.2 quintillones           │ Solo si superas 2.1MM   │
+└─────────────┴─────────┴─────────────────────────────┴─────────────────────────┘
+
+┌─────────────────┬─────────┬───────────────────────────────────────────────────┐
+│ DECIMAL/NUMERIC │ 5-17    │ Precisión exacta: DECIMAL(precision, scale)       │
+│ MONEY           │ 8       │ ±922 trillones, 4 decimales                       │
+│ SMALLMONEY      │ 4       │ ±214,748.36                                       │
+│ FLOAT           │ 4-8     │ ⚠️ EVITAR para dinero (aproximado)                │
+│ REAL            │ 4       │ ⚠️ EVITAR para dinero (aproximado)                │
+└─────────────────┴─────────┴───────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════════════════
+                            TIPOS DE DATOS FECHA
+═══════════════════════════════════════════════════════════════════════════════
+
+┌─────────────────┬─────────┬─────────────────────────────────────────────────────┐
+│ DATE            │ 3       │ Solo fecha (2025-03-28)                             │
+│ TIME            │ 3-5     │ Solo hora con precisión configurable               │
+│ DATETIME        │ 8       │ 1753-9999, precisión 3.33ms                        │
+│ DATETIME2       │ 6-8     │ 0001-9999, precisión hasta 100ns                   │
+│ SMALLDATETIME   │ 4       │ 1900-2079, precisión 1 minuto                      │
+│ DATETIMEOFFSET  │ 8-10    │ DATETIME2 + zona horaria                           │
+└─────────────────┴─────────┴─────────────────────────────────────────────────────┘
+
+ ✅ RECOMENDADOS:
+   • Solo fecha: DATE
+   • Fecha + hora: DATETIME2(0) para segundos, DATETIME2(3) para milisegundos
+   • Con timezone: DATETIMEOFFSET
+
+═══════════════════════════════════════════════════════════════════════════════
+                           TIPOS DE DATOS TEXTO
+═══════════════════════════════════════════════════════════════════════════════
+
+┌─────────────────┬─────────────────────────────────────────────────────────────┐
+│ CHAR(n)         │ Longitud fija, n bytes. Rellena con espacios.              │
+│ VARCHAR(n)      │ Variable, hasta n bytes + 2 overhead.                       │
+│ NCHAR(n)        │ Unicode fijo, n*2 bytes.                                    │
+│ NVARCHAR(n)     │ Unicode variable, hasta n*2 bytes + 2 overhead.            │
+│ VARCHAR(MAX)    │ ⚠️ LOB hasta 2GB. SOLO cuando > 8000 chars necesarios.     │
+│ NVARCHAR(MAX)   │ ⚠️ LOB Unicode hasta 2GB. Evitar en índices.               │
+└─────────────────┴─────────────────────────────────────────────────────────────┘
+
+ REGLA DE ORO:
+   • ASCII solamente → VARCHAR (email, código, teléfono)
+   • Caracteres internacionales → NVARCHAR (nombres, direcciones)
+   • NUNCA usar MAX si conoces el tamaño máximo
+
+═══════════════════════════════════════════════════════════════════════════════
+                                SARGABILITY
+═══════════════════════════════════════════════════════════════════════════════
+
+ SARGABLE = Search ARGument ABLE
+ Significa que SQL puede usar un índice de forma eficiente (Index SEEK)
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ❌ NO SARGABLE (SCAN)           →  ✅ SARGABLE (SEEK)                       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ WHERE YEAR(Fecha) = 2025         │ WHERE Fecha >= '2025-01-01'              │
+│                                  │   AND Fecha < '2026-01-01'               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ WHERE MONTH(Fecha) = 3           │ WHERE Fecha >= '2025-03-01'              │
+│                                  │   AND Fecha < '2025-04-01'               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ WHERE DATEADD(DAY,30,Fecha) > X  │ WHERE Fecha > DATEADD(DAY,-30,X)         │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ WHERE DATEDIFF(DAY,Fecha,@X) < 7 │ WHERE Fecha >= DATEADD(DAY,-7,@X)        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ WHERE CONVERT(DATE,Fecha) = @D   │ WHERE Fecha >= @D AND Fecha < @D+1       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ WHERE LEFT(Nombre,3) = 'JUA'     │ WHERE Nombre LIKE 'JUA%'                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ WHERE UPPER(Email) = 'X@Y.COM'   │ WHERE Email = 'x@y.com' (col CI)         │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ WHERE Columna + 10 > 100         │ WHERE Columna > 90                       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ WHERE Columna * 2 = 50           │ WHERE Columna = 25                       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ WHERE ISNULL(Col, 0) = 5         │ WHERE Col = 5 OR Col IS NULL             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ WHERE Texto LIKE '%valor%'       │ (Sin solución directa - Full Text)       │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════════════════
+                          CONVERSIONES IMPLÍCITAS
+═══════════════════════════════════════════════════════════════════════════════
+
+ Ocurre cuando comparas tipos diferentes y SQL convierte automáticamente:
+
+ Código VARCHAR     +    Valor INT    =    SCAN (convierte toda la columna)
+      ↓                      ↓
+ @Codigo = 12345        '00012345'
+
+ ⚠️ REGLA: Siempre pasar parámetros del mismo tipo que la columna
+
+ EJEMPLOS:
+ ┌──────────────────────────────────────────────────────────────────────────┐
+ │ ❌ WHERE CodigoVarchar = 12345                                          │
+ │ ✅ WHERE CodigoVarchar = '12345'                                        │
+ ├──────────────────────────────────────────────────────────────────────────┤
+ │ ❌ WHERE PrecioDecimal = 99.99 (FLOAT implícito)                        │
+ │ ✅ WHERE PrecioDecimal = CAST(99.99 AS DECIMAL(10,2))                   │
+ ├──────────────────────────────────────────────────────────────────────────┤
+ │ ❌ WHERE FechaDatetime = '2025-03-28' (string)                          │
+ │ ✅ WHERE FechaDatetime = CAST('2025-03-28' AS DATETIME)                 │
+ └──────────────────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════════════════
+                        COLUMNAS CALCULADAS PERSIST
+═══════════════════════════════════════════════════════════════════════════════
+
+ Si DEBES usar una función frecuentemente, hazla PERSISTED:
+
+ ALTER TABLE MiTabla
+ ADD Anio AS YEAR(FechaCreacion) PERSISTED;
+
+ CREATE INDEX IX_Anio ON MiTabla(Anio);
+
+ -- Ahora es SARGable:
+ SELECT * FROM MiTabla WHERE Anio = 2025;
+
+═══════════════════════════════════════════════════════════════════════════════
+                           PLAN DE EJECUCIÓN
+═══════════════════════════════════════════════════════════════════════════════
+
+ Ctrl+L     = Plan estimado (sin ejecutar)
+ Ctrl+M     = Incluir plan actual (ejecuta la query)
+
+ OPERADORES CLAVE:
+ ┌────────────────────────┬───────────┬──────────────────────────────────────────┐
+ │ Operador               │ Eficiencia│ Significado                              │
+ ├────────────────────────┼───────────┼──────────────────────────────────────────┤
+ │ Index Seek             │ ★★★★★    │ Búsqueda directa - ÓPTIMO                │
+ │ Clustered Index Seek   │ ★★★★★    │ Seek en índice clustered                 │
+ │ Index Scan             │ ★★★☆☆    │ Recorre todo el índice                   │
+ │ Table Scan             │ ★☆☆☆☆    │ Recorre toda la tabla (SIN ÍNDICE)       │
+ │ Key Lookup             │ ★★★☆☆    │ Busca columnas extra en clustered        │
+ │ Hash Match             │ ★★★☆☆    │ Join con hash (consume memoria)          │
+ │ Nested Loops           │ ★★★★☆    │ Join anidado (bueno para pocos rows)     │
+ │ Sort                   │ ★★☆☆☆    │ Ordena en memoria/disco                  │
+ └────────────────────────┴───────────┴──────────────────────────────────────────┘
+
+ WARNINGS (triángulo amarillo):
+ • Implicit Conversion - Conversión implícita afectando SARGability
+ • Missing Index - SQL sugiere un índice
+ • Spill to TempDB - Sort/Hash usando disco (lento)
+
+═══════════════════════════════════════════════════════════════════════════════
+                            STATISTICS IO
+═══════════════════════════════════════════════════════════════════════════════
+
+ SET STATISTICS IO ON;
+ -- Tu query aquí
+ SET STATISTICS IO OFF;
+
+ MÉTRICAS:
+ ┌────────────────────┬────────────────────────────────────────────────────────┐
+ │ logical reads      │ Páginas leídas de caché = Trabajo de la query         │
+ │ physical reads     │ Páginas leídas de disco = I/O real (más lento)        │
+ │ read-ahead reads   │ Páginas anticipadas                                    │
+ │ scan count         │ Veces que se recorrió el índice/tabla                 │
+ └────────────────────┴────────────────────────────────────────────────────────┘
+
+ OBJETIVO: Minimizar logical reads
+
+═══════════════════════════════════════════════════════════════════════════════
+                             CHECKLIST RÁPIDO
+═══════════════════════════════════════════════════════════════════════════════
+
+ □ ¿Estoy usando el tipo de dato más pequeño posible?
+ □ ¿Hay funciones aplicadas a columnas en WHERE?
+ □ ¿Los tipos de parámetros coinciden con las columnas?
+ □ ¿LIKE tiene comodín al inicio?
+ □ ¿Puedo usar rangos de fecha en vez de funciones?
+ □ ¿El plan muestra Index Seek o Index Scan?
+ □ ¿Hay warnings de conversión implícita?
+ □ ¿Cuántos logical reads tiene mi query?
+
+═══════════════════════════════════════════════════════════════════════════════
+                              FÓRMULA GENERAL
+═══════════════════════════════════════════════════════════════════════════════
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │                                                                         │
+  │     función(COLUMNA) = valor     →     COLUMNA = función_inversa(valor) │
+  │                ↓                                     ↓                  │
+  │           NO SARGABLE                            SARGABLE               │
+  │                                                                         │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════════════════
+                   NOTAS IMPORTANTES PARA EL EXAMEN
+═══════════════════════════════════════════════════════════════════════════════
+
+ 1. La causa #1 de queries lentos: funciones en columnas del WHERE
+ 
+ 2. LIKE '%texto%' NUNCA puede usar índice eficientemente
+ 
+ 3. DECIMAL es preferido sobre MONEY por portabilidad y claridad
+ 
+ 4. VARCHAR(MAX) y NVARCHAR(MAX) no pueden tener índices
+ 
+ 5. Columnas PERSISTED ocupan espacio pero aceleran consultas
+ 
+ 6. Index SEEK = bueno, Index SCAN = revisar query
+
+═══════════════════════════════════════════════════════════════════════════════

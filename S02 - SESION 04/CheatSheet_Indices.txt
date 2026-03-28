@@ -1,0 +1,284 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                  CHEAT SHEET - ÍNDICES ESTRATÉGICOS                          ║
+║                     SQL Server Intermedio - Sesión 4                          ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+═══════════════════════════════════════════════════════════════════════════════
+                         TIPOS DE ÍNDICES
+═══════════════════════════════════════════════════════════════════════════════
+
+┌─────────────────┬──────────────────────────────────────────────────────────────┐
+│ CLUSTERED       │ • Solo 1 por tabla                                          │
+│                 │ • Ordena físicamente los datos                              │
+│                 │ • Las hojas SON las filas de datos                          │
+│                 │ • Se crea automáticamente con PRIMARY KEY                   │
+│                 │ • Ideal para: PKs, rangos de fecha, búsquedas frecuentes   │
+├─────────────────┼──────────────────────────────────────────────────────────────┤
+│ NONCLUSTERED    │ • Hasta 999 por tabla                                       │
+│                 │ • Estructura separada de los datos                          │
+│                 │ • Las hojas tienen: Keys + puntero a fila                   │
+│                 │ • El puntero es RID (heap) o Clustering Key (si hay CI)    │
+│                 │ • Ideal para: búsquedas específicas, JOINs                 │
+├─────────────────┼──────────────────────────────────────────────────────────────┤
+│ COVERING        │ • NC index con columnas INCLUDE                             │
+│                 │ • Contiene TODAS las columnas de la query                   │
+│                 │ • Evita Key Lookup                                          │
+│                 │ • Las INCLUDE solo están en hojas (no en nodos internos)   │
+├─────────────────┼──────────────────────────────────────────────────────────────┤
+│ FILTERED        │ • NC index con cláusula WHERE                               │
+│                 │ • Solo indexa un subconjunto de filas                       │
+│                 │ • Más pequeño y eficiente                                   │
+│                 │ • La query DEBE coincidir con el filtro                    │
+└─────────────────┴──────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════════════════
+                        SINTAXIS CREATE INDEX
+═══════════════════════════════════════════════════════════════════════════════
+
+ -- Índice básico
+ CREATE NONCLUSTERED INDEX IX_Nombre
+ ON Tabla(Columna ASC);
+
+ -- Índice compuesto
+ CREATE INDEX IX_Multi
+ ON Tabla(Col1, Col2, Col3);
+
+ -- Índice con INCLUDE (covering)
+ CREATE INDEX IX_Covering
+ ON Tabla(ColBusqueda)
+ INCLUDE (ColExtra1, ColExtra2);
+
+ -- Índice filtrado
+ CREATE INDEX IX_Filtrado
+ ON Tabla(Columna)
+ WHERE Estado = 'ACTIVO';
+
+ -- Índice único
+ CREATE UNIQUE INDEX IX_Unico
+ ON Tabla(Columna);
+
+═══════════════════════════════════════════════════════════════════════════════
+                          KEY LOOKUP
+═══════════════════════════════════════════════════════════════════════════════
+
+ ¿QUÉ ES?
+ Cuando un NC index no tiene todas las columnas del SELECT,
+ SQL debe volver al Clustered Index para obtener el resto.
+
+ ┌──────────────────┐     ┌──────────────────┐     ┌────────────┐
+ │   NC Index       │ ──→ │  Clustered Index │ ──→ │  Resultado │
+ │   (SEEK)         │     │   (LOOKUP)       │     │            │
+ └──────────────────┘     └──────────────────┘     └────────────┘
+
+ ¿POR QUÉ ES MALO?
+ • Por CADA fila del NC Seek, hace 1 Lookup
+ • 1000 filas = 1000 Lookups adicionales
+ • Muy costoso en queries que devuelven muchas filas
+
+ ¿CÓMO EVITARLO?
+ Usar INCLUDE para agregar las columnas faltantes al índice:
+
+ -- ANTES (con Key Lookup):
+ CREATE INDEX IX_Fecha ON Ventas(Fecha);
+ SELECT Fecha, Cliente, Monto FROM Ventas WHERE Fecha = '2025-01-01';
+
+ -- DESPUÉS (sin Key Lookup):
+ CREATE INDEX IX_Fecha ON Ventas(Fecha) INCLUDE (Cliente, Monto);
+ SELECT Fecha, Cliente, Monto FROM Ventas WHERE Fecha = '2025-01-01';
+
+═══════════════════════════════════════════════════════════════════════════════
+                   ORDEN DE COLUMNAS EN ÍNDICE
+═══════════════════════════════════════════════════════════════════════════════
+
+ REGLA DEL LIBRO TELEFÓNICO:
+ Índice (Apellido, Nombre) = buscar por Apellido ✓, buscar por Nombre sola ✗
+
+ ORDEN CORRECTO:
+ 1. Columnas con IGUALDAD (=) primero
+ 2. Columnas con RANGO (>, <, BETWEEN) después
+ 3. Columnas de ORDER BY al final
+ 4. La más SELECTIVA primero
+
+ EJEMPLO:
+ Query: WHERE Estado = @E AND Fecha >= @F ORDER BY Nombre
+
+ Índice óptimo: (Estado, Fecha, Nombre)
+                   ↓       ↓       ↓
+              igualdad  rango  order by
+
+ ┌────────────────────────────────────────────────────────────────────────────┐
+ │ IMPORTANTE: El índice solo hace SEEK si usas columnas desde el inicio    │
+ │                                                                            │
+ │ INDEX (A, B, C):                                                          │
+ │   WHERE A = 1             → SEEK ✓                                        │
+ │   WHERE A = 1 AND B = 2   → SEEK ✓                                        │
+ │   WHERE B = 2             → SCAN ✗ (no puede saltar A)                   │
+ │   WHERE A = 1 AND C = 3   → SEEK en A, luego SCAN para C                 │
+ └────────────────────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════════════════
+                      KEY vs INCLUDE
+═══════════════════════════════════════════════════════════════════════════════
+
+ ┌─────────────────┬────────────────────────────────────────────────────────────┐
+ │                 │ KEY COLUMNS                  │ INCLUDE COLUMNS             │
+ │                 │ (dentro del paréntesis)      │ (después de INCLUDE)        │
+ ├─────────────────┼──────────────────────────────┼─────────────────────────────┤
+ │ Ubicación       │ Todos los niveles del B-tree│ Solo en nivel hoja          │
+ │ Ordenamiento    │ Sí, ordenadas               │ No, sin orden               │
+ │ Búsqueda        │ Sí, para WHERE/JOIN         │ No, solo lectura            │
+ │ Tamaño B-tree   │ Aumenta tamaño intermedio   │ Solo aumenta hojas          │
+ │ Uso típico      │ Columnas del WHERE/ORDER BY │ Columnas del SELECT         │
+ └─────────────────┴──────────────────────────────┴─────────────────────────────┘
+
+ EJEMPLO:
+ SELECT Nombre, Email, Saldo      -- Columnas a LEER
+ FROM Clientes
+ WHERE FechaRegistro >= '2025-01-01'  -- Columna de BUSQUEDA
+ ORDER BY FechaRegistro;              -- Columna de ORDEN
+
+ ÍNDICE ÓPTIMO:
+ CREATE INDEX IX_Clientes_Fecha
+ ON Clientes(FechaRegistro)        -- KEY: para buscar y ordenar
+ INCLUDE (Nombre, Email, Saldo);   -- INCLUDE: solo para leer
+
+═══════════════════════════════════════════════════════════════════════════════
+                      ÍNDICES FILTRADOS
+═══════════════════════════════════════════════════════════════════════════════
+
+ ¿CUÁNDO USAR?
+ • La mayoría de consultas buscan un subconjunto específico
+ • Distribución de datos muy desigual (ej: 90% inactivos, 10% activos)
+ • Columnas sparse (muchos NULLs)
+
+ SINTAXIS:
+ CREATE INDEX IX_Activos
+ ON Clientes(FechaUltimoAcceso)
+ WHERE Estado = 'ACTIVO';
+
+ REQUISITOS:
+ • La query debe incluir la condición del filtro
+ • No soporta: OR, IN con múltiples valores, columnas calculadas
+
+ VENTAJAS:
+ ✓ Menos espacio en disco
+ ✓ Menos tiempo de mantenimiento (INSERT/UPDATE/DELETE)
+ ✓ Más rápido porque recorre menos páginas
+ ✓ Menos fragmentación
+
+═══════════════════════════════════════════════════════════════════════════════
+                     MANTENIMIENTO DE ÍNDICES
+═══════════════════════════════════════════════════════════════════════════════
+
+ ┌─────────────────────┬─────────────────────────────────────────────────────────┐
+ │ Fragmentación       │ Acción                                                  │
+ ├─────────────────────┼─────────────────────────────────────────────────────────┤
+ │ < 10%               │ No hacer nada                                           │
+ │ 10% - 30%           │ ALTER INDEX IX_Nombre ON Tabla REORGANIZE              │
+ │ > 30%               │ ALTER INDEX IX_Nombre ON Tabla REBUILD                 │
+ └─────────────────────┴─────────────────────────────────────────────────────────┘
+
+ REORGANIZE vs REBUILD:
+ ┌─────────────────────┬──────────────────────────────────────────────────────────┐
+ │ REORGANIZE          │ • Online (no bloquea)                                    │
+ │                     │ • Menos recursos                                         │
+ │                     │ • Más lento                                              │
+ │                     │ • Defragmenta nivel hoja                                 │
+ ├─────────────────────┼──────────────────────────────────────────────────────────┤
+ │ REBUILD             │ • Offline por defecto (bloquea)                          │
+ │                     │ • Más recursos                                           │
+ │                     │ • Más rápido                                             │
+ │                     │ • Recrea completamente el índice                         │
+ │                     │ • Con ONLINE = ON: menos bloqueo (Enterprise)           │
+ └─────────────────────┴──────────────────────────────────────────────────────────┘
+
+ -- Rebuild todos los índices de una tabla
+ ALTER INDEX ALL ON Tabla REBUILD;
+
+ -- Rebuild online (Enterprise)
+ ALTER INDEX IX_Nombre ON Tabla REBUILD WITH (ONLINE = ON);
+
+═══════════════════════════════════════════════════════════════════════════════
+                      DMVs DE DIAGNÓSTICO
+═══════════════════════════════════════════════════════════════════════════════
+
+ -- Ver uso de índices
+ SELECT * FROM sys.dm_db_index_usage_stats;
+   • user_seeks: Búsquedas directas (bueno)
+   • user_scans: Recorridos completos (malo si es frecuente)
+   • user_lookups: Key Lookups (malo si es alto)
+   • user_updates: Actualizaciones por INSERT/UPDATE/DELETE
+
+ -- Ver fragmentación
+ SELECT * FROM sys.dm_db_index_physical_stats(DB_ID(), NULL, NULL, NULL, 'LIMITED');
+   • avg_fragmentation_in_percent: Porcentaje de fragmentación
+   • page_count: Número de páginas
+
+ -- Ver índices faltantes sugeridos
+ SELECT * FROM sys.dm_db_missing_index_details;
+   • equality_columns: Columnas para WHERE =
+   • inequality_columns: Columnas para WHERE > < BETWEEN
+   • included_columns: Columnas para INCLUDE
+
+═══════════════════════════════════════════════════════════════════════════════
+                      MEJORES PRÁCTICAS
+═══════════════════════════════════════════════════════════════════════════════
+
+ ✓ DO:
+   • Analizar planes de ejecución antes de crear índices
+   • Usar INCLUDE para evitar Key Lookups
+   • Considerar índices filtrados para subconjuntos frecuentes
+   • Revisar uso de índices periódicamente
+   • Mantener índices defragmentados
+   • Usar columnas estrechas (INT en vez de BIGINT)
+   • Nombrar índices descriptivamente: IX_Tabla_Columna
+
+ ✗ DON'T:
+   • Crear índices sin analizar necesidad
+   • Crear índices duplicados o redundantes
+   • Indexar columnas con pocos valores únicos (baja selectividad)
+   • Ignorar el costo de mantenimiento en tablas con muchos INSERT
+   • Crear índices muy anchos (muchas columnas KEY)
+   • Usar NVARCHAR(MAX) o VARCHAR(MAX) en índices
+
+═══════════════════════════════════════════════════════════════════════════════
+                    BALANCE LECTURA/ESCRITURA
+═══════════════════════════════════════════════════════════════════════════════
+
+ Cada índice tiene un COSTO:
+ • INSERT: Debe actualizar TODOS los índices
+ • UPDATE: Debe actualizar índices afectados
+ • DELETE: Debe actualizar TODOS los índices
+
+ TABLA CON MUCHOS INSERTs:
+ → Menos índices, más selectivos
+ → Evaluar si el beneficio de lectura justifica el costo
+
+ TABLA MAYORMENTE DE LECTURA:
+ → Más índices covering
+ → Índices compuestos para queries frecuentes
+
+═══════════════════════════════════════════════════════════════════════════════
+                      FÓRMULAS RÁPIDAS
+═══════════════════════════════════════════════════════════════════════════════
+
+ DISEÑAR ÍNDICE PARA QUERY:
+
+ 1. WHERE con = → Primera(s) columna(s) KEY
+ 2. WHERE con > < BETWEEN → Siguiente(s) columna(s) KEY  
+ 3. ORDER BY → Última(s) columna(s) KEY (en orden correcto)
+ 4. SELECT adicional → INCLUDE
+
+ EJEMPLO:
+ SELECT Nombre, Email
+ FROM Clientes
+ WHERE Estado = 'ACTIVO' AND Ciudad = 'Lima'
+   AND FechaRegistro BETWEEN @Inicio AND @Fin
+ ORDER BY FechaRegistro DESC;
+
+ ÍNDICE:
+ CREATE INDEX IX_Clientes_Busqueda
+ ON Clientes(Estado, Ciudad, FechaRegistro DESC)  -- KEY: = = BETWEEN+ORDER
+ INCLUDE (Nombre, Email);                          -- SELECT adicionales
+
+═══════════════════════════════════════════════════════════════════════════════

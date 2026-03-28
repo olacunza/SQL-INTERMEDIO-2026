@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sesión 2 - Manejo de Errores Pro</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #1a1a2e;
+            color: #eee;
+            line-height: 1.6;
+        }
+        h1, h2, h3 {
+            color: #00d4ff;
+        }
+        h1 {
+            text-align: center;
+            border-bottom: 3px solid #00d4ff;
+            padding-bottom: 15px;
+        }
+        .section {
+            background: #16213e;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            border-left: 4px solid #00d4ff;
+        }
+        .warning {
+            background: #3d1f1f;
+            border-left: 4px solid #ff4757;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .tip {
+            background: #1f3d1f;
+            border-left: 4px solid #2ed573;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .bancario {
+            background: #3d3d1f;
+            border-left: 4px solid #ffa502;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        code {
+            background: #0d0d0d;
+            padding: 2px 8px;
+            border-radius: 4px;
+            color: #2ed573;
+            font-family: 'Consolas', monospace;
+        }
+        pre {
+            background: #0d0d0d;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            color: #2ed573;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border: 1px solid #444;
+        }
+        th {
+            background: #00d4ff;
+            color: #1a1a2e;
+        }
+        tr:nth-child(even) {
+            background: #0f3460;
+        }
+        .agenda {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+        .agenda-item {
+            background: #0f3460;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .agenda-item span {
+            display: block;
+            color: #00d4ff;
+            font-size: 0.9em;
+        }
+        .diagram {
+            text-align: center;
+            padding: 20px;
+            background: #0d0d0d;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        .xact-table td:first-child {
+            font-weight: bold;
+            color: #ffa502;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>⚠️ Sesión 2: Manejo de Errores Pro</h1>
+    <p style="text-align: center; font-size: 1.2em;">SQL Server Intermedio - Semana 1 | Enfoque: Resiliencia ante Fallos Críticos</p>
+
+    <!-- AGENDA -->
+    <div class="section">
+        <h2>📋 Agenda de la Sesión (45 min)</h2>
+        <div class="agenda">
+            <div class="agenda-item">
+                <span>10 min</span>
+                <strong>TRY...CATCH Avanzado</strong>
+            </div>
+            <div class="agenda-item">
+                <span>12 min</span>
+                <strong>XACT_STATE() & @@TRANCOUNT</strong>
+            </div>
+            <div class="agenda-item">
+                <span>13 min</span>
+                <strong>Patrones de Reintento</strong>
+            </div>
+            <div class="agenda-item">
+                <span>10 min</span>
+                <strong>Logging de Errores</strong>
+            </div>
+        </div>
+    </div>
+
+    <!-- OBJETIVOS -->
+    <div class="section">
+        <h2>🎯 Objetivos de Aprendizaje</h2>
+        <ul>
+            <li>Dominar el bloque TRY...CATCH y todas las funciones de error</li>
+            <li>Entender y usar correctamente <code>XACT_STATE()</code> para decisiones de rollback</li>
+            <li>Implementar patrones de reintento (Retry Logic) para errores transitorios</li>
+            <li>Crear sistemas de logging de errores para diagnóstico</li>
+            <li>Aplicar el patrón "Fail Fast" en sistemas bancarios</li>
+        </ul>
+    </div>
+
+    <!-- TRY CATCH -->
+    <div class="section">
+        <h2>1️⃣ TRY...CATCH Avanzado</h2>
+        
+        <h3>Estructura Básica</h3>
+        <pre>
+BEGIN TRY
+    -- Código que puede fallar
+    INSERT INTO Tabla VALUES (...)
+END TRY
+BEGIN CATCH
+    -- Manejo del error
+    SELECT ERROR_MESSAGE() AS MensajeError;
+END CATCH
+        </pre>
+
+        <h3>Funciones de Error (Solo funcionan dentro de CATCH)</h3>
+        <table>
+            <tr>
+                <th>Función</th>
+                <th>Descripción</th>
+                <th>Ejemplo de Valor</th>
+            </tr>
+            <tr>
+                <td><code>ERROR_NUMBER()</code></td>
+                <td>Número de error (código)</td>
+                <td>547, 2627, 1205</td>
+            </tr>
+            <tr>
+                <td><code>ERROR_MESSAGE()</code></td>
+                <td>Mensaje descriptivo del error</td>
+                <td>"Violation of PRIMARY KEY..."</td>
+            </tr>
+            <tr>
+                <td><code>ERROR_SEVERITY()</code></td>
+                <td>Severidad del error (0-25)</td>
+                <td>16 (usuario), 20+ (fatal)</td>
+            </tr>
+            <tr>
+                <td><code>ERROR_STATE()</code></td>
+                <td>Estado del error (contexto)</td>
+                <td>1, 2, 3...</td>
+            </tr>
+            <tr>
+                <td><code>ERROR_LINE()</code></td>
+                <td>Línea donde ocurrió</td>
+                <td>42</td>
+            </tr>
+            <tr>
+                <td><code>ERROR_PROCEDURE()</code></td>
+                <td>Nombre del SP/Función</td>
+                <td>'SP_Transferencia'</td>
+            </tr>
+        </table>
+
+        <h3>Severidades Importantes</h3>
+        <table>
+            <tr>
+                <th>Rango</th>
+                <th>Tipo</th>
+                <th>Acción</th>
+            </tr>
+            <tr>
+                <td>0-10</td>
+                <td>Informativo</td>
+                <td>No es error real, solo warnings</td>
+            </tr>
+            <tr>
+                <td>11-16</td>
+                <td>Error de Usuario</td>
+                <td>Datos inválidos, violaciones de constraint</td>
+            </tr>
+            <tr>
+                <td>17-19</td>
+                <td>Error de Recursos</td>
+                <td>Disco lleno, límites excedidos</td>
+            </tr>
+            <tr>
+                <td>20-25</td>
+                <td>Error Fatal</td>
+                <td>Corrupción, hardware. Desconecta sesión.</td>
+            </tr>
+        </table>
+
+        <div class="warning">
+            <strong>⚠️ Errores que NO captura TRY...CATCH:</strong>
+            <ul>
+                <li>Errores de compilación (sintaxis)</li>
+                <li>Errores de severidad 20+ (fatales)</li>
+                <li>Errores de conexión</li>
+                <li>Errores en deferred name resolution</li>
+            </ul>
+        </div>
+
+        <h3>Patrón Completo de Manejo de Errores</h3>
+        <pre>
+CREATE PROCEDURE SP_OperacionCritica
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    DECLARE @ErrorNumber INT, @ErrorMessage NVARCHAR(4000);
+    DECLARE @ErrorSeverity INT, @ErrorState INT;
+    
+    BEGIN TRY
+        BEGIN TRANSACTION;
+            -- Operaciones críticas aquí
+            UPDATE Cuentas SET Saldo = Saldo - 1000 WHERE CuentaID = 1;
+            UPDATE Cuentas SET Saldo = Saldo + 1000 WHERE CuentaID = 2;
+        COMMIT TRANSACTION;
+    END TRY
+    BEGIN CATCH
+        -- Capturar información ANTES de cualquier otra operación
+        SET @ErrorNumber = ERROR_NUMBER();
+        SET @ErrorMessage = ERROR_MESSAGE();
+        SET @ErrorSeverity = ERROR_SEVERITY();
+        SET @ErrorState = ERROR_STATE();
+        
+        -- Rollback seguro
+        IF @@TRANCOUNT > 0
+            ROLLBACK TRANSACTION;
+        
+        -- Re-lanzar el error con THROW o RAISERROR
+        THROW;  -- SQL Server 2012+
+        -- o usar: RAISERROR(@ErrorMessage, @ErrorSeverity, @ErrorState);
+    END CATCH
+END
+        </pre>
+    </div>
+
+    <!-- XACT_STATE -->
+    <div class="section">
+        <h2>2️⃣ XACT_STATE() - El Guardián de las Transacciones</h2>
+        
+        <p><code>XACT_STATE()</code> retorna el estado de la transacción actual. Es <strong>CRÍTICO</strong> para saber si puedes hacer COMMIT o ROLLBACK.</p>
+
+        <table class="xact-table">
+            <tr>
+                <th>Valor</th>
+                <th>Estado</th>
+                <th>¿COMMIT?</th>
+                <th>¿ROLLBACK?</th>
+                <th>Situación</th>
+            </tr>
+            <tr>
+                <td>1</td>
+                <td>Activa (Committable)</td>
+                <td>✅ Sí</td>
+                <td>✅ Sí</td>
+                <td>Todo OK, puedes decidir</td>
+            </tr>
+            <tr>
+                <td>0</td>
+                <td>Sin transacción</td>
+                <td>❌ No</td>
+                <td>❌ No</td>
+                <td>No hay transacción abierta</td>
+            </tr>
+            <tr>
+                <td>-1</td>
+                <td>Doomed (Condenada)</td>
+                <td>❌ No</td>
+                <td>✅ Sí (obligatorio)</td>
+                <td>Error crítico, SOLO puedes hacer ROLLBACK</td>
+            </tr>
+        </table>
+
+        <div class="diagram">
+            <pre style="color: #00d4ff;">
+Estado de Transacción
+        │
+        ▼
+   XACT_STATE()
+        │
+   ┌────┼────┐
+   │    │    │
+   ▼    ▼    ▼
+  -1    0    1
+   │    │    │
+   ▼    ▼    ▼
+ROLLBACK  Nada  COMMIT/ROLLBACK
+(forzoso)       (tu decisión)
+            </pre>
+        </div>
+
+        <h3>¿Cuándo XACT_STATE() = -1 (Doomed)?</h3>
+        <ul>
+            <li>Deadlock detectado</li>
+            <li>Error de constraint con SET XACT_ABORT ON</li>
+            <li>Timeout de lock</li>
+            <li>Error grave que invalida la transacción</li>
+        </ul>
+
+        <h3>Patrón Correcto con XACT_STATE()</h3>
+        <pre>
+BEGIN CATCH
+    -- PRIMERO: Verificar estado de transacción
+    IF XACT_STATE() = -1
+    BEGIN
+        -- Transacción CONDENADA: solo podemos hacer ROLLBACK
+        ROLLBACK TRANSACTION;
+        PRINT 'Transacción condenada - ROLLBACK forzoso';
+    END
+    ELSE IF XACT_STATE() = 1
+    BEGIN
+        -- Transacción activa: podemos elegir
+        -- En errores, generalmente hacemos ROLLBACK
+        ROLLBACK TRANSACTION;
+        PRINT 'Transacción activa - ROLLBACK por error';
+    END
+    -- Si XACT_STATE() = 0, no hay transacción que manejar
+    
+    -- Registrar el error
+    INSERT INTO LogErrores (...)
+    VALUES (...);
+    
+    THROW;
+END CATCH
+        </pre>
+
+        <div class="tip">
+            <strong>💡 @@TRANCOUNT vs XACT_STATE():</strong>
+            <ul>
+                <li><code>@@TRANCOUNT</code>: Cuenta transacciones anidadas (0, 1, 2...)</li>
+                <li><code>XACT_STATE()</code>: Estado de la transacción (-1, 0, 1)</li>
+                <li>Puedes tener <code>@@TRANCOUNT > 0</code> pero <code>XACT_STATE() = -1</code> (transacción abierta pero condenada)</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- SET XACT_ABORT -->
+    <div class="section">
+        <h2>3️⃣ SET XACT_ABORT ON</h2>
+        
+        <p>Cuando está ON, <strong>cualquier error</strong> en tiempo de ejecución termina y revierte la transacción automáticamente.</p>
+
+        <table>
+            <tr>
+                <th>Aspecto</th>
+                <th>XACT_ABORT OFF (default)</th>
+                <th>XACT_ABORT ON</th>
+            </tr>
+            <tr>
+                <td>Error de constraint</td>
+                <td>Continúa ejecución</td>
+                <td>Termina y ROLLBACK</td>
+            </tr>
+            <tr>
+                <td>Timeout</td>
+                <td>Puede continuar</td>
+                <td>Termina y ROLLBACK</td>
+            </tr>
+            <tr>
+                <td>Control</td>
+                <td>Más granular</td>
+                <td>"Fail Fast"</td>
+            </tr>
+            <tr>
+                <td>Uso recomendado</td>
+                <td>SPs con manejo especial</td>
+                <td>Sistemas críticos/bancarios</td>
+            </tr>
+        </table>
+
+        <pre>
+CREATE PROCEDURE SP_TransaccionBancaria
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;  -- Recomendado para operaciones críticas
+    
+    BEGIN TRY
+        BEGIN TRANSACTION;
+            -- Si CUALQUIER error ocurre, todo se revierte automáticamente
+            UPDATE Cuentas SET Saldo = Saldo - 5000 WHERE CuentaID = 1;
+            UPDATE Cuentas SET Saldo = Saldo + 5000 WHERE CuentaID = 2;
+        COMMIT TRANSACTION;
+    END TRY
+    BEGIN CATCH
+        -- Con XACT_ABORT ON, XACT_STATE() será -1 en la mayoría de errores
+        IF XACT_STATE() <> 0
+            ROLLBACK TRANSACTION;
+        THROW;
+    END CATCH
+END
+        </pre>
+
+        <div class="bancario">
+            <strong>🏦 Recomendación Bancaria:</strong>
+            <p>Usar <code>SET XACT_ABORT ON</code> en todos los SPs que manejen dinero. 
+            Es mejor fallar rápido y revertir todo que dejar transacciones a medias.</p>
+        </div>
+    </div>
+
+    <!-- PATRONES DE REINTENTO -->
+    <div class="section">
+        <h2>4️⃣ Patrones de Reintento (Retry Logic)</h2>
+        
+        <p>Algunos errores son <strong>transitorios</strong> y pueden resolverse con un reintento:</p>
+
+        <h3>Errores Transitorios Comunes</h3>
+        <table>
+            <tr>
+                <th>Error #</th>
+                <th>Descripción</th>
+                <th>¿Reintentar?</th>
+            </tr>
+            <tr>
+                <td>1205</td>
+                <td>Deadlock victim</td>
+                <td>✅ Sí</td>
+            </tr>
+            <tr>
+                <td>1222</td>
+                <td>Lock timeout</td>
+                <td>✅ Sí</td>
+            </tr>
+            <tr>
+                <td>-2</td>
+                <td>Timeout de conexión</td>
+                <td>✅ Sí</td>
+            </tr>
+            <tr>
+                <td>8645</td>
+                <td>Memory grant timeout</td>
+                <td>✅ Sí</td>
+            </tr>
+            <tr>
+                <td>2627</td>
+                <td>Violación de PK</td>
+                <td>❌ No (error de datos)</td>
+            </tr>
+            <tr>
+                <td>547</td>
+                <td>Violación de FK</td>
+                <td>❌ No (error de datos)</td>
+            </tr>
+        </table>
+
+        <h3>Patrón de Reintento con WHILE</h3>
+        <pre>
+CREATE PROCEDURE SP_TransferenciaConReintento
+    @Origen INT,
+    @Destino INT,
+    @Monto DECIMAL(15,2)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    DECLARE @Intentos INT = 0;
+    DECLARE @MaxIntentos INT = 3;
+    DECLARE @Exito BIT = 0;
+    DECLARE @ErrorNumber INT;
+    
+    WHILE @Intentos < @MaxIntentos AND @Exito = 0
+    BEGIN
+        SET @Intentos = @Intentos + 1;
+        
+        BEGIN TRY
+            BEGIN TRANSACTION;
+                UPDATE CUENTAS SET SALDO = SALDO - @Monto WHERE CUENTAID = @Origen;
+                UPDATE CUENTAS SET SALDO = SALDO + @Monto WHERE CUENTAID = @Destino;
+            COMMIT TRANSACTION;
+            
+            SET @Exito = 1;
+            SELECT 'ÉXITO' AS Resultado, @Intentos AS Intentos;
+        END TRY
+        BEGIN CATCH
+            SET @ErrorNumber = ERROR_NUMBER();
+            
+            IF XACT_STATE() <> 0
+                ROLLBACK TRANSACTION;
+            
+            -- Solo reintentar si es error transitorio
+            IF @ErrorNumber IN (1205, 1222, -2, 8645)
+            BEGIN
+                -- Esperar antes de reintentar (backoff)
+                WAITFOR DELAY '00:00:01';  -- 1 segundo
+                PRINT CONCAT('Reintento ', @Intentos, ' de ', @MaxIntentos);
+            END
+            ELSE
+            BEGIN
+                -- Error no transitorio: no reintentar
+                SET @Intentos = @MaxIntentos;
+                THROW;
+            END
+        END CATCH
+    END
+    
+    IF @Exito = 0
+    BEGIN
+        RAISERROR('Operación fallida después de %d intentos', 16, 1, @MaxIntentos);
+    END
+END
+        </pre>
+
+        <h3>Backoff Exponencial</h3>
+        <p>Para evitar sobrecarga, aumentar el tiempo de espera entre reintentos:</p>
+        <pre>
+-- Intento 1: esperar 1 segundo
+-- Intento 2: esperar 2 segundos
+-- Intento 3: esperar 4 segundos
+
+DECLARE @WaitTime INT = POWER(2, @Intentos - 1);  -- 1, 2, 4 segundos
+DECLARE @WaitString VARCHAR(12) = '00:00:0' + CAST(@WaitTime AS VARCHAR(2));
+WAITFOR DELAY @WaitString;
+        </pre>
+
+        <div class="warning">
+            <strong>⚠️ Cuidado con los Reintentos:</strong>
+            <ul>
+                <li>NO reintentar errores de negocio (saldo insuficiente, cuenta bloqueada)</li>
+                <li>Limitar número de reintentos (3-5 máximo)</li>
+                <li>Registrar cada reintento en el log</li>
+                <li>Alertar si se excede el límite de reintentos</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- LOGGING DE ERRORES -->
+    <div class="section">
+        <h2>5️⃣ Logging de Errores</h2>
+        
+        <h3>Tabla de Log de Errores</h3>
+        <pre>
+CREATE TABLE LOG_ERRORES (
+    LogID INT IDENTITY(1,1) PRIMARY KEY,
+    FechaHora DATETIME2 DEFAULT SYSDATETIME(),
+    ErrorNumber INT,
+    ErrorMessage NVARCHAR(4000),
+    ErrorSeverity INT,
+    ErrorState INT,
+    ErrorProcedure NVARCHAR(128),
+    ErrorLine INT,
+    Usuario NVARCHAR(128) DEFAULT SYSTEM_USER,
+    HostName NVARCHAR(128) DEFAULT HOST_NAME(),
+    AplicacionCliente NVARCHAR(128) DEFAULT APP_NAME()
+);
+        </pre>
+
+        <h3>SP para Registrar Errores</h3>
+        <pre>
+CREATE PROCEDURE SP_RegistrarError
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    INSERT INTO LOG_ERRORES (
+        ErrorNumber, ErrorMessage, ErrorSeverity, 
+        ErrorState, ErrorProcedure, ErrorLine
+    )
+    VALUES (
+        ERROR_NUMBER(), ERROR_MESSAGE(), ERROR_SEVERITY(),
+        ERROR_STATE(), ERROR_PROCEDURE(), ERROR_LINE()
+    );
+END
+        </pre>
+
+        <h3>Uso en un SP</h3>
+        <pre>
+BEGIN CATCH
+    -- Registrar error (esto funciona incluso con transacción condenada)
+    EXEC SP_RegistrarError;
+    
+    -- Rollback
+    IF XACT_STATE() <> 0
+        ROLLBACK TRANSACTION;
+    
+    -- Re-lanzar error
+    THROW;
+END CATCH
+        </pre>
+
+        <div class="tip">
+            <strong>💡 Tip:</strong> La tabla LOG_ERRORES debe tener su propio filegroup 
+            y NO estar en la misma transacción que el código que falla. 
+            Usar un SP separado garantiza que el log se guarde incluso si hay error.
+        </div>
+    </div>
+
+    <!-- THROW vs RAISERROR -->
+    <div class="section">
+        <h2>6️⃣ THROW vs RAISERROR</h2>
+        
+        <table>
+            <tr>
+                <th>Aspecto</th>
+                <th>THROW</th>
+                <th>RAISERROR</th>
+            </tr>
+            <tr>
+                <td>Versión</td>
+                <td>SQL Server 2012+</td>
+                <td>Todas las versiones</td>
+            </tr>
+            <tr>
+                <td>Re-lanzar error original</td>
+                <td>✅ <code>THROW;</code></td>
+                <td>❌ (necesita variables)</td>
+            </tr>
+            <tr>
+                <td>Severidad personalizada</td>
+                <td>❌ Siempre 16</td>
+                <td>✅ Cualquier severidad</td>
+            </tr>
+            <tr>
+                <td>Requiere ; antes</td>
+                <td>✅ Sí</td>
+                <td>❌ No</td>
+            </tr>
+            <tr>
+                <td>Termina el batch</td>
+                <td>✅ Sí</td>
+                <td>Solo si severidad 11+</td>
+            </tr>
+        </table>
+
+        <pre>
+-- THROW simple (re-lanzar error capturado)
+BEGIN CATCH
+    ; -- Punto y coma REQUERIDO antes de THROW
+    THROW;
+END CATCH
+
+-- THROW con error personalizado
+THROW 50001, 'Error personalizado del negocio', 1;
+
+-- RAISERROR (más flexible)
+RAISERROR('Error: %s', 16, 1, 'Saldo insuficiente');
+
+-- RAISERROR con WITH LOG (registra en Windows Event Log)
+RAISERROR('Error crítico en transferencia', 20, 1) WITH LOG;
+        </pre>
+    </div>
+
+    <!-- DEMO -->
+    <div class="section">
+        <h2>🧪 Ejercicios Prácticos</h2>
+        <p>Ver el archivo <code>Scripts/1. Manejo_Errores_Pro.sql</code> para:</p>
+        <ol>
+            <li><strong>Demo XACT_STATE:</strong> Ver cómo cambia con diferentes errores</li>
+            <li><strong>Demo Retry:</strong> Simular deadlock y reintentar</li>
+            <li><strong>Demo Logging:</strong> Sistema completo de registro de errores</li>
+            <li><strong>Ejercicio:</strong> Crear SP bancario con manejo robusto de errores</li>
+        </ol>
+    </div>
+
+    <!-- RESUMEN -->
+    <div class="section">
+        <h2>📝 Resumen Ejecutivo</h2>
+        <table>
+            <tr>
+                <th>Concepto</th>
+                <th>Qué Recordar</th>
+            </tr>
+            <tr>
+                <td>TRY...CATCH</td>
+                <td>Captura errores de ejecución. Las funciones ERROR_* solo funcionan en CATCH.</td>
+            </tr>
+            <tr>
+                <td>XACT_STATE()</td>
+                <td>-1 = solo ROLLBACK, 0 = sin transacción, 1 = decidir libremente</td>
+            </tr>
+            <tr>
+                <td>XACT_ABORT ON</td>
+                <td>Fail Fast: cualquier error revierte automáticamente. Usar en sistemas bancarios.</td>
+            </tr>
+            <tr>
+                <td>Reintentos</td>
+                <td>Solo para errores transitorios (1205, 1222). Máximo 3-5 intentos.</td>
+            </tr>
+            <tr>
+                <td>THROW vs RAISERROR</td>
+                <td>THROW es más simple para re-lanzar. RAISERROR para control de severidad.</td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- TAREA -->
+    <div class="section">
+        <h2>📚 Tarea para la Próxima Sesión</h2>
+        <ol>
+            <li>Revisar SPs existentes e identificar cuáles NO tienen manejo de errores</li>
+            <li>Implementar la tabla LOG_ERRORES en tu ambiente de desarrollo</li>
+            <li>Crear un SP SP_TransferenciaRobusta que combine todo lo aprendido</li>
+            <li>Investigar: ¿Qué es el error 3930 y cuándo ocurre?</li>
+        </ol>
+    </div>
+
+    <footer style="text-align: center; margin-top: 30px; padding: 20px; border-top: 1px solid #444;">
+        <p>SQL Server Intermedio - Sesión 2 | © 2026</p>
+    </footer>
+
+</body>
+</html>

@@ -1,0 +1,249 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║         CHEAT SHEET - SESIÓN 2: MANEJO DE ERRORES PRO                        ║
+║                    SQL SERVER INTERMEDIO                                     ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+================================================================================
+ ESTRUCTURA TRY...CATCH
+================================================================================
+
+BEGIN TRY
+    -- Código que puede fallar
+    BEGIN TRANSACTION;
+        -- operaciones
+    COMMIT TRANSACTION;
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    -- Manejar error
+    THROW;  -- Re-lanzar (opcional)
+END CATCH
+
+================================================================================
+ FUNCIONES DE ERROR (Solo funcionan en CATCH)
+================================================================================
+
+ERROR_NUMBER()     → Número de error (ej: 547, 2627, 1205)
+ERROR_MESSAGE()    → Texto descriptivo del error
+ERROR_SEVERITY()   → Severidad (0-25)
+ERROR_STATE()      → Estado del error
+ERROR_LINE()       → Número de línea donde ocurrió
+ERROR_PROCEDURE()  → Nombre del SP/función (NULL si es ad-hoc)
+
+================================================================================
+ XACT_STATE() - ESTADO DE TRANSACCIÓN
+================================================================================
+
+ Valor │ Estado         │ ¿COMMIT? │ ¿ROLLBACK? │ Situación
+───────┼────────────────┼──────────┼────────────┼─────────────────────
+  1    │ Activa         │ ✅ Sí    │ ✅ Sí      │ Todo OK, tú decides
+  0    │ Sin transacción│ ❌ No    │ ❌ No      │ No hay TX abierta
+ -1    │ Condenada      │ ❌ No    │ ✅ Sí      │ Solo ROLLBACK posible
+
+PATRÓN CORRECTO:
+IF XACT_STATE() = -1
+    ROLLBACK TRANSACTION;  -- Obligatorio
+ELSE IF XACT_STATE() = 1
+    ROLLBACK TRANSACTION;  -- Por decisión
+
+================================================================================
+ @@TRANCOUNT vs XACT_STATE()
+================================================================================
+
+@@TRANCOUNT  → Cuenta transacciones anidadas (0, 1, 2, 3...)
+XACT_STATE() → Estado de la transacción (-1, 0, 1)
+
+IMPORTANTE: Puedes tener @@TRANCOUNT = 1 con XACT_STATE() = -1
+(transacción abierta pero condenada)
+
+================================================================================
+ SET XACT_ABORT ON/OFF
+================================================================================
+
+                  │ XACT_ABORT OFF │ XACT_ABORT ON
+──────────────────┼────────────────┼─────────────────
+Error de runtime  │ Continúa       │ Termina + ROLLBACK
+Deadlock          │ Termina        │ Termina + ROLLBACK
+Uso recomendado   │ Control fino   │ Sistemas críticos
+
+SET XACT_ABORT ON;  -- Usar en SPs bancarios
+
+================================================================================
+ SEVERIDADES DE ERROR
+================================================================================
+
+ 0-10  → Informativa (no es error real)
+11-16  → Error de usuario (datos, permisos, constraints)
+17-19  → Error de recursos (disco, memoria)
+20-25  → Error fatal (desconecta sesión, corrupción)
+
+================================================================================
+ THROW vs RAISERROR
+================================================================================
+
+                    │ THROW              │ RAISERROR
+────────────────────┼────────────────────┼─────────────────────
+Versión             │ SQL 2012+          │ Todas
+Re-lanzar error     │ ;THROW;            │ Necesita variables
+Severidad           │ Siempre 16         │ Configurable (0-25)
+Parámetros          │ 3 fijos            │ Formato tipo printf
+Termina batch       │ Sí                 │ Solo si sev >= 11
+
+-- THROW simple
+THROW 50001, 'Mensaje de error', 1;
+
+-- THROW re-lanzar (requiere ; antes)
+BEGIN CATCH
+    ;THROW;
+END CATCH
+
+-- RAISERROR con formato
+RAISERROR('Error en cuenta %s: saldo %.2f', 16, 1, @cuenta, @saldo);
+
+================================================================================
+ ERRORES TRANSITORIOS (OK REINTENTAR)
+================================================================================
+
+1205  → Deadlock victim
+1222  → Lock request timeout
+-2    → Connection timeout
+8645  → Memory grant timeout
+
+================================================================================
+ ERRORES NO TRANSITORIOS (NO REINTENTAR)
+================================================================================
+
+547   → FK constraint violation
+2627  → PK/Unique violation
+515   → Cannot insert NULL
+8152  → String truncation
+
+================================================================================
+ PATRÓN DE REINTENTO (RETRY)
+================================================================================
+
+DECLARE @Intentos INT = 0, @MaxIntentos INT = 3, @Exito BIT = 0;
+
+WHILE @Intentos < @MaxIntentos AND @Exito = 0
+BEGIN
+    SET @Intentos += 1;
+    BEGIN TRY
+        BEGIN TRANSACTION;
+            -- operaciones
+        COMMIT TRANSACTION;
+        SET @Exito = 1;
+    END TRY
+    BEGIN CATCH
+        IF XACT_STATE() <> 0 ROLLBACK;
+        
+        IF ERROR_NUMBER() IN (1205, 1222)  -- Transitorio
+        BEGIN
+            -- Backoff exponencial: 1s, 2s, 4s
+            DECLARE @Wait VARCHAR(12) = '00:00:0' + CAST(POWER(2, @Intentos-1) AS VARCHAR);
+            WAITFOR DELAY @Wait;
+        END
+        ELSE
+            BREAK;  -- Error no transitorio
+    END CATCH
+END
+
+================================================================================
+ TABLA DE LOG DE ERRORES
+================================================================================
+
+CREATE TABLE LOG_ERRORES (
+    LogID INT IDENTITY PRIMARY KEY,
+    FechaHora DATETIME2 DEFAULT SYSDATETIME(),
+    ErrorNumber INT,
+    ErrorMessage NVARCHAR(4000),
+    ErrorSeverity INT,
+    ErrorState INT,
+    ErrorProcedure NVARCHAR(128),
+    ErrorLine INT,
+    Usuario NVARCHAR(128) DEFAULT SYSTEM_USER,
+    DatosAdicionales NVARCHAR(MAX)
+);
+
+================================================================================
+ SP PARA REGISTRAR ERRORES
+================================================================================
+
+CREATE PROCEDURE SP_RegistrarError
+    @DatosAdicionales NVARCHAR(MAX) = NULL
+AS
+BEGIN
+    INSERT INTO LOG_ERRORES (
+        ErrorNumber, ErrorMessage, ErrorSeverity, 
+        ErrorState, ErrorProcedure, ErrorLine, DatosAdicionales
+    )
+    VALUES (
+        ERROR_NUMBER(), ERROR_MESSAGE(), ERROR_SEVERITY(),
+        ERROR_STATE(), ERROR_PROCEDURE(), ERROR_LINE(), @DatosAdicionales
+    );
+END
+
+================================================================================
+ PATRÓN COMPLETO RECOMENDADO
+================================================================================
+
+CREATE PROCEDURE SP_MiProcedimiento
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    
+    DECLARE @ErrorNum INT, @ErrorMsg NVARCHAR(4000);
+    
+    BEGIN TRY
+        -- Validaciones ANTES de la transacción
+        IF @Monto <= 0 THROW 50001, 'Monto inválido', 1;
+        
+        BEGIN TRANSACTION;
+            -- Solo operaciones DML
+            UPDATE ...
+            INSERT ...
+        COMMIT TRANSACTION;
+        
+        SELECT 'ÉXITO' AS Resultado;
+    END TRY
+    BEGIN CATCH
+        SET @ErrorNum = ERROR_NUMBER();
+        SET @ErrorMsg = ERROR_MESSAGE();
+        
+        IF XACT_STATE() <> 0 ROLLBACK;
+        
+        EXEC SP_RegistrarError;
+        
+        SELECT 'ERROR' AS Resultado, @ErrorMsg AS Mensaje;
+    END CATCH
+END
+
+================================================================================
+ ERRORES QUE NO CAPTURA TRY...CATCH
+================================================================================
+
+✗ Errores de sintaxis/compilación
+✗ Nombre de objeto inválido (si no usa deferred name resolution)
+✗ Errores de severidad 20+
+✗ Desconexión de red
+
+================================================================================
+ PREGUNTAS FRECUENTES
+================================================================================
+
+P: ¿Puedo usar COMMIT después de un error?
+R: Solo si XACT_STATE() = 1. Si es -1, solo ROLLBACK.
+
+P: ¿El LOG se guarda si hay ROLLBACK?
+R: Sí, si el INSERT al log está FUERA de la transacción o usa un SP separado.
+
+P: ¿Cuántos reintentos son recomendables?
+R: 3-5 máximo, con backoff exponencial.
+
+P: ¿THROW necesita punto y coma?
+R: Sí, cuando re-lanza: ;THROW; (por sintaxis de T-SQL)
+
+P: ¿Por qué XACT_ABORT ON para banca?
+R: Fail Fast: mejor revertir todo que dejar transacciones incompletas.
+
+================================================================================

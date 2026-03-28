@@ -1,0 +1,201 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║         CHEAT SHEET - SESIÓN 1: TRANSACCIONES Y BLOQUEOS                     ║
+║                    SQL SERVER INTERMEDIO                                     ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+================================================================================
+ PROPIEDADES ACID
+================================================================================
+A - ATOMICIDAD    → Todo o nada (si falla una parte, todo se revierte)
+C - CONSISTENCIA  → DB va de estado válido a otro estado válido
+I - AISLAMIENTO   → Transacciones concurrentes no interfieren entre sí
+D - DURABILIDAD   → Datos confirmados persisten aunque falle el sistema
+
+================================================================================
+ SINTAXIS RÁPIDA
+================================================================================
+
+-- Transacción básica
+BEGIN TRANSACTION;
+    -- operaciones
+COMMIT TRANSACTION;
+
+-- Con manejo de errores
+BEGIN TRY
+    BEGIN TRANSACTION;
+        -- operaciones
+    COMMIT TRANSACTION;
+END TRY
+BEGIN CATCH
+    IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+    -- manejar error
+END CATCH
+
+================================================================================
+ NIVELES DE AISLAMIENTO
+================================================================================
+
+SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;  -- Dirty reads permitidos
+SET TRANSACTION ISOLATION LEVEL READ COMMITTED;    -- DEFAULT - Sin dirty reads
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;   -- Lecturas repetibles
+SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;      -- Máxima protección
+SET TRANSACTION ISOLATION LEVEL SNAPSHOT;          -- Versionado (requiere config DB)
+
+-- Ver nivel actual
+SELECT transaction_isolation_level FROM sys.dm_exec_sessions WHERE session_id = @@SPID;
+
+================================================================================
+ TIPOS DE LECTURA PROBLEMÁTICA
+================================================================================
+
+DIRTY READ          → Leer datos NO confirmados (pueden revertirse)
+NON-REPEATABLE READ → Mismo SELECT, diferentes valores
+PHANTOM READ        → Mismo SELECT, diferentes filas
+
+================================================================================
+ NOLOCK - ¡CUIDADO!
+================================================================================
+
+SELECT * FROM Tabla WITH (NOLOCK);  -- Equivale a READ UNCOMMITTED
+
+PELIGROS:
+✗ Puede leer datos que se van a revertir
+✗ Puede leer la misma fila dos veces
+✗ Puede saltarse filas
+✗ NO USAR EN DATOS FINANCIEROS
+
+CUÁNDO SÍ USARLO:
+✓ Dashboards de monitoreo
+✓ Reportes aproximados
+✓ Conteos estimados
+
+================================================================================
+ RCSI (READ COMMITTED SNAPSHOT ISOLATION)
+================================================================================
+
+-- Activar (requiere exclusividad)
+ALTER DATABASE MiDB SET READ_COMMITTED_SNAPSHOT ON WITH ROLLBACK IMMEDIATE;
+
+-- Verificar
+SELECT name, is_read_committed_snapshot_on FROM sys.databases WHERE name = 'MiDB';
+
+VENTAJAS:
+✓ Sin dirty reads
+✓ Sin bloqueos de lectura
+✓ No requiere cambiar código
+
+DESVENTAJAS:
+✗ Usa más TempDB
+✗ Pequeño overhead de CPU
+
+================================================================================
+ HINTS DE BLOQUEO
+================================================================================
+
+WITH (NOLOCK)   → Sin bloqueos (peligroso)
+WITH (ROWLOCK)  → Bloquear solo la fila
+WITH (PAGLOCK)  → Bloquear la página
+WITH (TABLOCK)  → Bloquear toda la tabla
+WITH (UPDLOCK)  → Bloqueo de actualización (previene race conditions)
+WITH (XLOCK)    → Bloqueo exclusivo
+
+================================================================================
+ PREVENCIÓN DE DEADLOCKS
+================================================================================
+
+1. ORDENAMIENTO CONSISTENTE
+   → Siempre acceder tablas en el mismo orden (alfabético o por ID)
+
+2. TRANSACCIONES CORTAS
+   → Hacer cálculos ANTES del BEGIN TRAN
+
+3. USAR ROWLOCK
+   → Bloquear la mínima cantidad de datos
+
+4. ÍNDICES ADECUADOS
+   → Menos tiempo de búsqueda = menos tiempo de bloqueo
+
+5. CONSIDERAR RCSI
+   → Evita muchos bloqueos usando versionado
+
+================================================================================
+ MONITOREO DE BLOQUEOS
+================================================================================
+
+-- Ver bloqueos actuales
+SELECT * FROM sys.dm_tran_locks WHERE resource_database_id = DB_ID();
+
+-- Ver sesiones bloqueadas
+SELECT blocking_session_id, session_id, wait_time, wait_type
+FROM sys.dm_exec_requests WHERE blocking_session_id > 0;
+
+-- Ver deadlocks recientes (Extended Events)
+SELECT XEvent.query('(event/data[@name="xml_report"]/value/deadlock)[1]')
+FROM (SELECT CAST(target_data AS XML) AS TargetData
+      FROM sys.dm_xe_session_targets st
+      JOIN sys.dm_xe_sessions s ON s.address = st.event_session_address
+      WHERE s.name = 'system_health') AS Data
+CROSS APPLY TargetData.nodes('RingBufferTarget/event[@name="xml_deadlock_report"]') AS X(XEvent);
+
+================================================================================
+ FUNCIONES ÚTILES
+================================================================================
+
+@@TRANCOUNT         → Número de transacciones anidadas activas
+@@ERROR             → Último error (0 = éxito)
+XACT_STATE()        → Estado de transacción (-1=doom, 0=none, 1=active)
+ERROR_MESSAGE()     → Mensaje del último error (dentro de CATCH)
+ERROR_NUMBER()      → Número del error
+ERROR_SEVERITY()    → Severidad del error
+ERROR_STATE()       → Estado del error
+
+================================================================================
+ EJEMPLO PATRÓN BANCARIO
+================================================================================
+
+CREATE PROCEDURE SP_TRANSFERENCIA @Origen INT, @Destino INT, @Monto DECIMAL(15,2)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    -- Ordenamiento consistente: bloquear primero el ID menor
+    DECLARE @Primero INT = IIF(@Origen < @Destino, @Origen, @Destino);
+    DECLARE @Segundo INT = IIF(@Origen < @Destino, @Destino, @Origen);
+    
+    BEGIN TRY
+        BEGIN TRANSACTION;
+            -- Bloquear en orden
+            SELECT SALDO FROM CUENTAS WITH (UPDLOCK) WHERE CUENTAID = @Primero;
+            SELECT SALDO FROM CUENTAS WITH (UPDLOCK) WHERE CUENTAID = @Segundo;
+            
+            -- Validar y transferir
+            UPDATE CUENTAS SET SALDO = SALDO - @Monto WHERE CUENTAID = @Origen;
+            UPDATE CUENTAS SET SALDO = SALDO + @Monto WHERE CUENTAID = @Destino;
+        COMMIT;
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK;
+        THROW;
+    END CATCH
+END
+
+================================================================================
+ PREGUNTAS FRECUENTES DE ALUMNOS
+================================================================================
+
+P: ¿NOLOCK es igual a READ UNCOMMITTED?
+R: Sí, pero NOLOCK es a nivel de tabla y READ UNCOMMITTED a nivel de sesión.
+
+P: ¿Cuál es el nivel de aislamiento por defecto?
+R: READ COMMITTED
+
+P: ¿RCSI afecta el rendimiento?
+R: Incrementa uso de TempDB y algo de CPU, pero elimina bloqueos de lectura.
+
+P: ¿Puedo usar COMMIT sin BEGIN TRANSACTION?
+R: No, dará error. Siempre deben ir en par.
+
+P: ¿Qué pasa si hay un ROLLBACK dentro de un TRY?
+R: Se revierte todo y el control pasa al CATCH.
+
+================================================================================
