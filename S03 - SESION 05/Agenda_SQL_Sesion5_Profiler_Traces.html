@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sesión 5 - SQL Profiler & Traces</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #1a1a2e;
+            color: #eee;
+            line-height: 1.6;
+        }
+        h1, h2, h3 {
+            color: #00d4ff;
+        }
+        h1 {
+            text-align: center;
+            border-bottom: 3px solid #00d4ff;
+            padding-bottom: 15px;
+        }
+        .section {
+            background: #16213e;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            border-left: 4px solid #00d4ff;
+        }
+        .warning {
+            background: #3d1f1f;
+            border-left: 4px solid #ff4757;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .tip {
+            background: #1f3d1f;
+            border-left: 4px solid #2ed573;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .bancario {
+            background: #3d3d1f;
+            border-left: 4px solid #ffa502;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        code {
+            background: #0d0d0d;
+            padding: 2px 8px;
+            border-radius: 4px;
+            color: #2ed573;
+            font-family: 'Consolas', monospace;
+        }
+        pre {
+            background: #0d0d0d;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            color: #2ed573;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border: 1px solid #444;
+        }
+        th {
+            background: #00d4ff;
+            color: #1a1a2e;
+        }
+        tr:nth-child(even) {
+            background: #0f3460;
+        }
+        .agenda {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+        .agenda-item {
+            background: #0f3460;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .agenda-item span {
+            display: block;
+            color: #00d4ff;
+            font-size: 0.9em;
+        }
+        .diagram {
+            background: #0d0d0d;
+            padding: 20px;
+            border-radius: 10px;
+            font-family: 'Consolas', monospace;
+            white-space: pre;
+            overflow-x: auto;
+            color: #00d4ff;
+            text-align: center;
+        }
+        .highlight {
+            color: #ffa502;
+            font-weight: bold;
+        }
+        .deprecated {
+            color: #ff4757;
+            text-decoration: line-through;
+            opacity: 0.7;
+        }
+        .recommended {
+            color: #2ed573;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 Sesión 5: SQL Profiler & Traces</h1>
+    <p style="text-align: center; color: #888;">Semana 3 | SQL Server Intermedio | Enfoque: Identificar el SP que "cuelga" la DB</p>
+
+    <div class="section">
+        <h2>📋 Agenda de la Sesión</h2>
+        <div class="agenda">
+            <div class="agenda-item">
+                <strong>Parte 1</strong>
+                <span>10 min</span>
+                Fundamentos de SQL Profiler
+            </div>
+            <div class="agenda-item">
+                <strong>Parte 2</strong>
+                <span>15 min</span>
+                Server-Side Traces con T-SQL
+            </div>
+            <div class="agenda-item">
+                <strong>Parte 3</strong>
+                <span>10 min</span>
+                Filtros y Eventos Clave
+            </div>
+            <div class="agenda-item">
+                <strong>Parte 4</strong>
+                <span>10 min</span>
+                Caso Práctico: SP Problemático
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>🎯 Objetivos de Aprendizaje</h2>
+        <ul>
+            <li>Entender la diferencia entre <strong>SQL Profiler GUI</strong> y <strong>Server-Side Traces</strong></li>
+            <li>Crear traces programáticos con T-SQL usando <code>sp_trace_create</code></li>
+            <li>Aplicar <strong>filtros efectivos</strong> para reducir el ruido y capturar solo lo relevante</li>
+            <li>Identificar <strong>consultas lentas</strong> y <strong>SPs problemáticos</strong></li>
+            <li>Usar <strong>DMVs como alternativa</strong> cuando no se pueden crear traces</li>
+            <li>Capturar y analizar <strong>Deadlocks</strong> con Deadlock Graph</li>
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>📊 ¿Qué es SQL Profiler?</h2>
+        
+        <div class="diagram">
+┌─────────────────────────────────────────────────────────────────┐
+│                     HERRAMIENTAS DE MONITOREO                    │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ┌──────────────────┐    ┌──────────────────┐    ┌────────────┐ │
+│  │   SQL Profiler   │    │ Server-Side      │    │  Extended  │ │
+│  │      (GUI)       │    │    Traces        │    │   Events   │ │
+│  └────────┬─────────┘    └────────┬─────────┘    └─────┬──────┘ │
+│           │                       │                    │        │
+│     Desarrollo            Producción              Producción    │
+│     Debugging             Automatizado            Moderno       │
+│           │                       │                    │        │
+│     <span class="deprecated">DEPRECATED</span>               Vigente           <span class="recommended">RECOMENDADO</span>    │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+        </div>
+
+        <div class="warning">
+            <strong>⚠️ Importante:</strong> SQL Profiler está marcado como DEPRECATED desde SQL Server 2012.
+            Microsoft recomienda usar <strong>Extended Events</strong> (próxima sesión).
+            Sin embargo, los Server-Side Traces con T-SQL siguen siendo válidos.
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>📡 Eventos Más Importantes</h2>
+        
+        <table>
+            <tr>
+                <th>EventClass</th>
+                <th>Nombre</th>
+                <th>Uso</th>
+            </tr>
+            <tr>
+                <td>12</td>
+                <td><code>SQL:BatchCompleted</code></td>
+                <td>Captura todas las queries con métricas finales</td>
+            </tr>
+            <tr>
+                <td>43</td>
+                <td><code>SP:Completed</code></td>
+                <td>Captura ejecución de Stored Procedures</td>
+            </tr>
+            <tr>
+                <td>10</td>
+                <td><code>RPC:Completed</code></td>
+                <td>Llamadas desde aplicaciones (ADO.NET, etc.)</td>
+            </tr>
+            <tr>
+                <td>148</td>
+                <td><code>Deadlock Graph</code></td>
+                <td>Captura XML completo del deadlock</td>
+            </tr>
+            <tr>
+                <td>25</td>
+                <td><code>Lock:Deadlock</code></td>
+                <td>Indica que ocurrió un deadlock</td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="section">
+        <h2>📏 Columnas Clave para Análisis</h2>
+        
+        <table>
+            <tr>
+                <th>ColumnID</th>
+                <th>Nombre</th>
+                <th>Descripción</th>
+            </tr>
+            <tr>
+                <td>1</td>
+                <td><code>TextData</code></td>
+                <td>Texto SQL o nombre del SP</td>
+            </tr>
+            <tr>
+                <td>13</td>
+                <td><code>Duration</code></td>
+                <td>Duración en <strong>microsegundos</strong> (÷1000 = ms)</td>
+            </tr>
+            <tr>
+                <td>16</td>
+                <td><code>Reads</code></td>
+                <td>Lecturas lógicas de páginas</td>
+            </tr>
+            <tr>
+                <td>18</td>
+                <td><code>CPU</code></td>
+                <td>Tiempo de CPU en milisegundos</td>
+            </tr>
+            <tr>
+                <td>34</td>
+                <td><code>ObjectName</code></td>
+                <td>Nombre del SP, tabla, etc.</td>
+            </tr>
+            <tr>
+                <td>10</td>
+                <td><code>ApplicationName</code></td>
+                <td>Aplicación que ejecutó la query</td>
+            </tr>
+        </table>
+
+        <div class="tip">
+            <strong>💡 Tip Senior:</strong> Para diagnóstico rápido, ordena por: 
+            <code>Duration DESC</code> (más lentas), 
+            <code>Reads DESC</code> (más I/O), 
+            <code>CPU DESC</code> (más procesamiento).
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>🛠️ Crear Trace con T-SQL</h2>
+        
+        <pre>
+-- 1. CREAR EL TRACE
+DECLARE @TraceID INT;
+EXEC sp_trace_create 
+    @traceid = @TraceID OUTPUT,
+    @options = 2,                            -- Rollover de archivos
+    @tracefile = N'C:\Temp\MiTrace',         -- Sin extensión .trc
+    @maxfilesize = 100;                      -- 100 MB por archivo
+
+-- 2. AGREGAR EVENTOS Y COLUMNAS
+-- Evento SQL:BatchCompleted (12) con columna Duration (13)
+EXEC sp_trace_setevent @TraceID, 12, 13, 1;  -- Duration
+EXEC sp_trace_setevent @TraceID, 12, 1, 1;   -- TextData
+EXEC sp_trace_setevent @TraceID, 12, 16, 1;  -- Reads
+
+-- 3. AGREGAR FILTROS
+-- Solo consultas > 1 segundo (1,000,000 microsegundos)
+EXEC sp_trace_setfilter @TraceID, 13, 0, 4, 1000000;
+
+-- 4. INICIAR
+EXEC sp_trace_setstatus @TraceID, 1;         -- 1 = Iniciar
+
+-- 5. DETENER Y CERRAR
+EXEC sp_trace_setstatus @TraceID, 0;         -- 0 = Detener
+EXEC sp_trace_setstatus @TraceID, 2;         -- 2 = Cerrar
+
+-- 6. LEER ARCHIVO
+SELECT * FROM fn_trace_gettable(N'C:\Temp\MiTrace.trc', DEFAULT);
+        </pre>
+    </div>
+
+    <div class="section">
+        <h2>🔍 Filtros para Reducir el Ruido</h2>
+        
+        <table>
+            <tr>
+                <th>CompOp</th>
+                <th>Significado</th>
+                <th>Ejemplo de Uso</th>
+            </tr>
+            <tr>
+                <td>0</td>
+                <td>= (igual)</td>
+                <td>Solo una base de datos específica</td>
+            </tr>
+            <tr>
+                <td>4</td>
+                <td>>= (mayor o igual)</td>
+                <td>Duration >= 1000000 (queries > 1 seg)</td>
+            </tr>
+            <tr>
+                <td>7</td>
+                <td>NOT LIKE</td>
+                <td>Excluir SQL Profiler de la captura</td>
+            </tr>
+        </table>
+
+        <pre>
+-- Filtrar solo base de datos BancoDB
+DECLARE @DBID INT = DB_ID('BancoDB');
+EXEC sp_trace_setfilter @TraceID, 3, 0, 0, @DBID;
+
+-- Filtrar consultas > 500ms
+EXEC sp_trace_setfilter @TraceID, 13, 0, 4, 500000;
+
+-- Excluir herramientas de monitoreo
+EXEC sp_trace_setfilter @TraceID, 10, 0, 7, N'SQL Server Profiler';
+EXEC sp_trace_setfilter @TraceID, 10, 0, 7, N'Microsoft SQL Server Management Studio%';
+        </pre>
+    </div>
+
+    <div class="bancario">
+        <h3>🏦 Aplicación Bancaria: El SP que "Cuelga" la DB</h3>
+        <p>
+            <strong>Escenario típico:</strong> El equipo de operaciones reporta que el sistema
+            se pone lento todos los días a las 3:00 PM durante el proceso de conciliación.
+        </p>
+        <p><strong>Estrategia de diagnóstico:</strong></p>
+        <ol>
+            <li>Crear trace filtrado por <code>Duration >= 5 segundos</code></li>
+            <li>Activar antes del horario problemático (2:45 PM)</li>
+            <li>Capturar eventos <code>SP:Completed</code> y <code>SQL:BatchCompleted</code></li>
+            <li>Analizar resultados ordenando por <code>Duration DESC</code></li>
+            <li>Identificar el SP/query más lento y revisar su plan de ejecución</li>
+        </ol>
+    </div>
+
+    <div class="section">
+        <h2>📊 Alternativa: DMVs sin Trace</h2>
+        
+        <p>Cuando no tienes permisos para crear traces, usa las <strong>Dynamic Management Views</strong>:</p>
+        
+        <pre>
+-- TOP 10 consultas más lentas
+SELECT TOP 10
+    SUBSTRING(st.text, 1, 200) AS Query,
+    qs.execution_count AS Ejecuciones,
+    qs.total_elapsed_time / 1000 AS TotalMS,
+    qs.total_elapsed_time / qs.execution_count / 1000 AS PromedioMS,
+    qs.total_logical_reads AS Lecturas
+FROM sys.dm_exec_query_stats qs
+CROSS APPLY sys.dm_exec_sql_text(qs.sql_handle) st
+ORDER BY qs.total_elapsed_time DESC;
+
+-- TOP 10 SPs más ejecutados
+SELECT TOP 10
+    OBJECT_NAME(ps.object_id) AS SP,
+    ps.execution_count AS Ejecuciones,
+    ps.total_elapsed_time / 1000 AS TotalMS
+FROM sys.dm_exec_procedure_stats ps
+WHERE database_id = DB_ID()
+ORDER BY ps.total_elapsed_time DESC;
+        </pre>
+    </div>
+
+    <div class="section">
+        <h2>⚡ Captura de Deadlocks</h2>
+        
+        <div class="diagram">
+┌─────────────────────────────────────────────────────────────────┐
+│                    DEADLOCK CAPTURE FLOW                        │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│   Session A                              Session B               │
+│      │                                      │                    │
+│      ▼                                      ▼                    │
+│   UPDATE Cuenta 1 ─────┐        ┌───── UPDATE Cuenta 2          │
+│      │                 │        │          │                    │
+│      │            WAIT │        │ WAIT     │                    │
+│      ▼                 │        │          ▼                    │
+│   UPDATE Cuenta 2 ◄────┼────────┼───► UPDATE Cuenta 1           │
+│                        │        │                                │
+│                        ▼        ▼                                │
+│                     💀 DEADLOCK 💀                               │
+│                                                                  │
+│   → SQL Server elige una "víctima" y hace ROLLBACK              │
+│   → El Deadlock Graph captura el XML con los detalles           │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+        </div>
+
+        <pre>
+-- Trace para capturar Deadlocks
+EXEC sp_trace_setevent @TraceID, 148, 1, 1;  -- Deadlock Graph (XML)
+EXEC sp_trace_setevent @TraceID, 25, 1, 1;   -- Lock:Deadlock
+        </pre>
+    </div>
+
+    <div class="section">
+        <h2>✅ Resumen de la Sesión</h2>
+        
+        <table>
+            <tr>
+                <th>Herramienta</th>
+                <th>Uso</th>
+                <th>Estado</th>
+            </tr>
+            <tr>
+                <td>SQL Profiler GUI</td>
+                <td>Desarrollo y debugging rápido</td>
+                <td class="deprecated">DEPRECATED</td>
+            </tr>
+            <tr>
+                <td>Server-Side Traces (T-SQL)</td>
+                <td>Producción, automatización</td>
+                <td>Vigente</td>
+            </tr>
+            <tr>
+                <td>Extended Events</td>
+                <td>Todo escenario</td>
+                <td class="recommended">RECOMENDADO</td>
+            </tr>
+            <tr>
+                <td>DMVs</td>
+                <td>Análisis sin trace activo</td>
+                <td class="recommended">SIEMPRE DISPONIBLE</td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="section">
+        <h2>📁 Archivos de la Sesión</h2>
+        <ul>
+            <li><code>1. SQL_Profiler_Traces.sql</code> - Script principal con teoría y demos</li>
+            <li><code>2. Ejercicios_Profiler.sql</code> - Ejercicios prácticos</li>
+            <li><code>CheatSheet_Profiler.txt</code> - Referencia rápida</li>
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>➡️ Próxima Sesión (Sesión 6)</h2>
+        <h3>Extended Events (XEvents)</h3>
+        <ul>
+            <li>Reemplazo moderno del Profiler con menor overhead</li>
+            <li>Configuración de sesiones de eventos</li>
+            <li>Monitoreo ligero en producción</li>
+            <li>Captura de errores y deadlocks con XEvents</li>
+        </ul>
+    </div>
+
+    <footer style="text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #444; color: #888;">
+        <p>SQL Server Intermedio 2026 | Sesión 5 de 16</p>
+        <p>Semana 3 - SQL Profiler & Traces</p>
+    </footer>
+</body>
+</html>

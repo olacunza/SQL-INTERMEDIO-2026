@@ -1,0 +1,259 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                    SQL PROFILER & TRACES - CHEAT SHEET                       ║
+║                        SQL Server Intermedio - Sesión 5                      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  📌 CONCEPTOS CLAVE                                                          │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  SQL Profiler GUI    → Herramienta gráfica para desarrollo/debugging        │
+│  Server-Side Trace   → Trace programático T-SQL (mejor para producción)     │
+│  Extended Events     → Sucesor moderno del Profiler (desde SQL 2012)        │
+│  DMVs                → Vistas dinámicas para análisis sin trace             │
+│                                                                              │
+│  ⚠️ SQL Profiler está DEPRECATED - Usar Extended Events en producción        │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  🎯 EVENTOS MÁS UTILIZADOS                                                   │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  EventClass │ Nombre              │ Descripción                              │
+│  ───────────┼─────────────────────┼────────────────────────────────────────  │
+│     10      │ RPC:Completed       │ Llamada RPC completada (apps externas)   │
+│     12      │ SQL:BatchCompleted  │ Batch SQL completado (métricas finales)  │
+│     13      │ SQL:BatchStarting   │ Batch SQL iniciando                      │
+│     25      │ Lock:Deadlock       │ Ocurrió un deadlock                      │
+│     43      │ SP:Completed        │ Stored Procedure completado              │
+│     44      │ SP:Starting         │ Stored Procedure iniciando               │
+│     45      │ SP:StmtCompleted    │ Statement dentro de SP completado        │
+│     59      │ Lock:Deadlock Chain │ Cadena de deadlock                       │
+│    148      │ Deadlock Graph      │ XML del grafo de deadlock                │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  📊 COLUMNAS IMPORTANTES                                                     │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ColumnID │ Nombre          │ Descripción                                    │
+│  ─────────┼─────────────────┼──────────────────────────────────────────────  │
+│     1     │ TextData        │ Texto SQL o nombre del objeto                  │
+│     3     │ DatabaseID      │ ID de la base de datos                         │
+│     8     │ HostName        │ Nombre del equipo cliente                      │
+│    10     │ ApplicationName │ Nombre de la aplicación                        │
+│    11     │ LoginName       │ Usuario de SQL Server                          │
+│    12     │ SPID            │ ID del proceso de servidor                     │
+│    13     │ Duration        │ Duración en MICROSEGUNDOS                      │
+│    14     │ StartTime       │ Hora de inicio                                 │
+│    15     │ EndTime         │ Hora de fin                                    │
+│    16     │ Reads           │ Lecturas lógicas                               │
+│    17     │ Writes          │ Escrituras lógicas                             │
+│    18     │ CPU             │ Tiempo de CPU en milisegundos                  │
+│    34     │ ObjectName      │ Nombre del objeto (SP, tabla, etc.)            │
+│                                                                              │
+│  ⚡ TIP: Duration está en MICROSEGUNDOS. Dividir por 1000 para milisegundos  │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  🛠️ COMANDOS T-SQL PARA TRACES                                               │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  -- CREAR TRACE                                                              │
+│  EXEC sp_trace_create @traceid = @ID OUTPUT,                                 │
+│       @options = 2,                    -- TRACE_FILE_ROLLOVER                │
+│       @tracefile = N'C:\Temp\MiTrace', -- Sin extensión .trc                 │
+│       @maxfilesize = 100;              -- MB por archivo                     │
+│                                                                              │
+│  -- AGREGAR EVENTO + COLUMNA                                                 │
+│  EXEC sp_trace_setevent @TraceID, @EventClass, @ColumnID, 1;                 │
+│                                                                              │
+│  -- AGREGAR FILTRO                                                           │
+│  EXEC sp_trace_setfilter @TraceID, @ColumnID, @LogicalOp, @CompOp, @Value;   │
+│                                                                              │
+│  -- INICIAR TRACE                                                            │
+│  EXEC sp_trace_setstatus @TraceID, 1;  -- 1 = Iniciar                        │
+│                                                                              │
+│  -- DETENER TRACE                                                            │
+│  EXEC sp_trace_setstatus @TraceID, 0;  -- 0 = Detener                        │
+│                                                                              │
+│  -- CERRAR Y ELIMINAR DEFINICIÓN                                             │
+│  EXEC sp_trace_setstatus @TraceID, 2;  -- 2 = Cerrar                         │
+│                                                                              │
+│  -- LEER ARCHIVO .TRC                                                        │
+│  SELECT * FROM fn_trace_gettable(N'C:\Temp\MiTrace.trc', DEFAULT);           │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  🔍 OPERADORES DE COMPARACIÓN PARA FILTROS (sp_trace_setfilter)              │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  CompOp │ Significado                                                        │
+│  ───────┼──────────────────────────────────────────────────────────────────  │
+│    0    │ = (igual)                                                          │
+│    1    │ <> (diferente)                                                     │
+│    2    │ > (mayor que)                                                      │
+│    3    │ < (menor que)                                                      │
+│    4    │ >= (mayor o igual)                                                 │
+│    5    │ <= (menor o igual)                                                 │
+│    6    │ LIKE                                                               │
+│    7    │ NOT LIKE                                                           │
+│                                                                              │
+│  LogicalOp: 0 = AND, 1 = OR                                                  │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  📋 PLANTILLA: TRACE PARA CONSULTAS LENTAS                                   │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  DECLARE @TraceID INT;                                                       │
+│  DECLARE @DBID INT = DB_ID('MiBaseDatos');                                   │
+│                                                                              │
+│  -- Crear trace                                                              │
+│  EXEC sp_trace_create @traceid = @TraceID OUTPUT, @options = 2,              │
+│       @tracefile = N'C:\Temp\ConsultasLentas', @maxfilesize = 100;           │
+│                                                                              │
+│  -- Evento: SQL:BatchCompleted (12)                                          │
+│  EXEC sp_trace_setevent @TraceID, 12, 1, 1;   -- TextData                    │
+│  EXEC sp_trace_setevent @TraceID, 12, 13, 1;  -- Duration                    │
+│  EXEC sp_trace_setevent @TraceID, 12, 16, 1;  -- Reads                       │
+│  EXEC sp_trace_setevent @TraceID, 12, 18, 1;  -- CPU                         │
+│  EXEC sp_trace_setevent @TraceID, 12, 14, 1;  -- StartTime                   │
+│                                                                              │
+│  -- Evento: SP:Completed (43)                                                │
+│  EXEC sp_trace_setevent @TraceID, 43, 1, 1;   -- TextData                    │
+│  EXEC sp_trace_setevent @TraceID, 43, 13, 1;  -- Duration                    │
+│  EXEC sp_trace_setevent @TraceID, 43, 16, 1;  -- Reads                       │
+│  EXEC sp_trace_setevent @TraceID, 43, 18, 1;  -- CPU                         │
+│  EXEC sp_trace_setevent @TraceID, 43, 34, 1;  -- ObjectName                  │
+│                                                                              │
+│  -- Filtros                                                                  │
+│  EXEC sp_trace_setfilter @TraceID, 13, 0, 4, 1000000;  -- Duration >= 1 seg  │
+│  EXEC sp_trace_setfilter @TraceID, 3, 0, 0, @DBID;     -- Solo mi DB         │
+│  EXEC sp_trace_setfilter @TraceID, 10, 0, 7, N'SQL Server Profiler';         │
+│                                                                              │
+│  -- Iniciar                                                                  │
+│  EXEC sp_trace_setstatus @TraceID, 1;                                        │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  📋 PLANTILLA: TRACE PARA DEADLOCKS                                         │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  DECLARE @TraceID INT;                                                       │
+│                                                                              │
+│  EXEC sp_trace_create @traceid = @TraceID OUTPUT, @options = 2,              │
+│       @tracefile = N'C:\Temp\Deadlocks', @maxfilesize = 100;                 │
+│                                                                              │
+│  -- Deadlock Graph (148) - Captura el XML completo                           │
+│  EXEC sp_trace_setevent @TraceID, 148, 1, 1;   -- TextData (XML)             │
+│  EXEC sp_trace_setevent @TraceID, 148, 12, 1;  -- SPID                       │
+│  EXEC sp_trace_setevent @TraceID, 148, 14, 1;  -- StartTime                  │
+│                                                                              │
+│  -- Lock:Deadlock (25)                                                       │
+│  EXEC sp_trace_setevent @TraceID, 25, 1, 1;    -- TextData                   │
+│  EXEC sp_trace_setevent @TraceID, 25, 12, 1;   -- SPID                       │
+│  EXEC sp_trace_setevent @TraceID, 25, 14, 1;   -- StartTime                  │
+│                                                                              │
+│  EXEC sp_trace_setstatus @TraceID, 1;                                        │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  🔄 ALTERNATIVA: DMVs PARA ANÁLISIS SIN TRACE                                │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  -- TOP 10 consultas más lentas                                              │
+│  SELECT TOP 10                                                               │
+│      SUBSTRING(st.text, 1, 200) AS Query,                                    │
+│      qs.execution_count AS Ejecuciones,                                      │
+│      qs.total_elapsed_time / 1000 AS TotalMS,                                │
+│      qs.total_elapsed_time / qs.execution_count / 1000 AS PromMS,            │
+│      qs.total_logical_reads AS Lecturas                                      │
+│  FROM sys.dm_exec_query_stats qs                                             │
+│  CROSS APPLY sys.dm_exec_sql_text(qs.sql_handle) st                          │
+│  ORDER BY qs.total_elapsed_time DESC;                                        │
+│                                                                              │
+│  -- TOP 10 SPs más ejecutados                                                │
+│  SELECT TOP 10                                                               │
+│      OBJECT_NAME(ps.object_id) AS SP,                                        │
+│      ps.execution_count AS Ejecuciones,                                      │
+│      ps.total_elapsed_time / 1000 AS TotalMS,                                │
+│      ps.total_logical_reads AS Lecturas                                      │
+│  FROM sys.dm_exec_procedure_stats ps                                         │
+│  WHERE database_id = DB_ID()                                                 │
+│  ORDER BY ps.total_elapsed_time DESC;                                        │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  ⚡ TIPS PARA PRODUCCIÓN                                                      │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ✓ SIEMPRE usar filtros - nunca capturar todo                               │
+│  ✓ Filtrar por Duration para reducir volumen                                │
+│  ✓ Excluir herramientas de monitoreo (Profiler, SSMS)                       │
+│  ✓ Usar Server-Side Traces en producción (menor overhead)                   │
+│  ✓ Guardar traces en disco separado de los datos                            │
+│  ✓ Limitar tamaño de archivo y usar rollover                                │
+│  ✓ Preferir Extended Events sobre Profiler                                  │
+│  ✓ Documentar qué traces están activos y por qué                            │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  🏦 APLICACIÓN BANCARIA                                                      │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  Escenarios típicos donde usar Traces/Profiler:                              │
+│                                                                              │
+│  • Proceso de cierre mensual tarda demasiado                                 │
+│    → Trace para SP:Completed con filtro Duration > 5 segundos                │
+│                                                                              │
+│  • Deadlocks recurrentes en transferencias                                   │
+│    → Trace para Deadlock Graph activo 24/7                                   │
+│                                                                              │
+│  • Core lento a las 3 PM todos los días                                      │
+│    → Trace programado entre 2:30 PM y 3:30 PM                                │
+│                                                                              │
+│  • Auditoría de acceso a tabla sensible                                      │
+│    → Trace con filtro ObjectName = 'TABLA_SENSIBLE'                          │
+│                                                                              │
+│  • Identificar qué aplicación satura la DB                                   │
+│    → Agrupar resultados por ApplicationName y HostName                       │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  📚 REFERENCIAS RÁPIDAS                                                      │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  -- Ver traces activos                                                       │
+│  SELECT * FROM sys.traces;                                                   │
+│                                                                              │
+│  -- Ver eventos de un trace                                                  │
+│  SELECT * FROM sys.fn_trace_geteventinfo(@TraceID);                          │
+│                                                                              │
+│  -- Ver todos los eventos disponibles                                        │
+│  SELECT * FROM sys.trace_events;                                             │
+│                                                                              │
+│  -- Ver todas las columnas disponibles                                       │
+│  SELECT * FROM sys.trace_columns;                                            │
+│                                                                              │
+│  -- Ver categorías de eventos                                                │
+│  SELECT * FROM sys.trace_categories;                                         │
+│                                                                              │
+│  -- Trace default (siempre activo)                                           │
+│  SELECT * FROM sys.traces WHERE id = 1;                                      │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════════════════
+ Próxima Sesión: Extended Events (XEvents) - El Reemplazo Moderno del Profiler
+═══════════════════════════════════════════════════════════════════════════════
