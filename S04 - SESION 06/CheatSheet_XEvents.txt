@@ -1,0 +1,323 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                   EXTENDED EVENTS (XEvents) - CHEAT SHEET                    ║
+║                        SQL Server Intermedio - Sesión 6                      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  📌 ARQUITECTURA DE EXTENDED EVENTS                                          │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌─────────────┐                                                             │
+│  │   SESSION   │  ← Contenedor principal                                     │
+│  └──────┬──────┘                                                             │
+│         │                                                                    │
+│    ┌────┴─────────────┐                                                      │
+│    ▼                  ▼                                                      │
+│  ┌──────────────┐  ┌──────────────┐                                          │
+│  │    EVENT     │  │    TARGET    │                                          │
+│  │  (qué)       │  │   (dónde)    │                                          │
+│  └──────┬───────┘  └──────────────┘                                          │
+│         │                                                                    │
+│    ┌────┴────┐                                                               │
+│    ▼         ▼                                                               │
+│  ┌──────┐  ┌───────────┐                                                     │
+│  │ACTION│  │ PREDICATE │                                                     │
+│  │(+info)│  │ (filtro)  │                                                    │
+│  └──────┘  └───────────┘                                                     │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  🎯 EVENTOS MÁS UTILIZADOS                                                   │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  PERFORMANCE:                                                                │
+│  ─────────────                                                               │
+│  • sqlserver.sql_statement_completed  → Consultas SQL completadas            │
+│  • sqlserver.sp_statement_completed   → Statements dentro de SPs            │
+│  • sqlserver.rpc_completed            → Llamadas RPC (desde apps)            │
+│  • sqlserver.query_post_execution_showplan → Plan de ejecución               │
+│                                                                              │
+│  BLOQUEOS Y DEADLOCKS:                                                       │
+│  ─────────────────────                                                       │
+│  • sqlserver.xml_deadlock_report      → Grafo XML completo de deadlock       │
+│  • sqlserver.lock_deadlock            → Indica que ocurrió deadlock          │
+│  • sqlserver.lock_timeout             → Timeout esperando lock               │
+│  • sqlserver.lock_escalation          → Escalación de bloqueo                │
+│                                                                              │
+│  ERRORES:                                                                    │
+│  ────────                                                                    │
+│  • sqlserver.error_reported           → Errores por severidad                │
+│  • sqlserver.attention                → Cancelación de query (timeout)       │
+│                                                                              │
+│  SEGURIDAD:                                                                  │
+│  ──────────                                                                  │
+│  • sqlserver.login                    → Login exitoso                        │
+│  • sqlserver.login_failed             → Login fallido                        │
+│  • sqlserver.logout                   → Logout                               │
+│                                                                              │
+│  WAITS:                                                                      │
+│  ──────                                                                      │
+│  • sqlos.wait_completed               → Espera completada                    │
+│  • sqlos.wait_info                    → Información de espera                │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  🎬 ACCIONES (ACTIONS) COMUNES                                               │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  • sqlserver.sql_text          → Texto completo de la consulta               │
+│  • sqlserver.database_name     → Nombre de la base de datos                  │
+│  • sqlserver.username          → Usuario que ejecutó                         │
+│  • sqlserver.client_hostname   → Nombre del equipo cliente                   │
+│  • sqlserver.client_app_name   → Nombre de la aplicación                     │
+│  • sqlserver.session_id        → SPID (ID de sesión)                         │
+│  • sqlserver.query_hash        → Hash único de la consulta                   │
+│  • sqlserver.query_plan_hash   → Hash del plan de ejecución                  │
+│  • sqlserver.plan_handle       → Handle para obtener plan                    │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  📦 TARGETS (DESTINOS)                                                       │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  TARGET           │ DESCRIPCIÓN                       │ USO                  │
+│  ─────────────────┼───────────────────────────────────┼────────────────────  │
+│  ring_buffer      │ Memoria circular (no persiste)    │ Diagnóstico rápido   │
+│  event_file       │ Archivo .xel en disco             │ Histórico/Auditoría  │
+│  event_counter    │ Solo cuenta eventos               │ Métricas             │
+│  histogram        │ Agrupa por columna                │ Análisis             │
+│  pair_matching    │ Relaciona start/complete          │ Correlación          │
+│                                                                              │
+│  ⚡ TIP: Usa ring_buffer para debugging, event_file para producción          │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  🛠️ SINTAXIS BÁSICA                                                          │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  -- CREAR SESIÓN                                                             │
+│  CREATE EVENT SESSION NombreSesion                                           │
+│  ON SERVER                                                                   │
+│  ADD EVENT paquete.nombre_evento (                                           │
+│      ACTION (                                                                │
+│          sqlserver.sql_text,                                                 │
+│          sqlserver.database_name                                             │
+│      )                                                                       │
+│      WHERE predicado                                                         │
+│  )                                                                           │
+│  ADD TARGET package0.ring_buffer (SET max_memory = 4096)                     │
+│  WITH (                                                                      │
+│      MAX_MEMORY = 4096 KB,                                                   │
+│      EVENT_RETENTION_MODE = ALLOW_SINGLE_EVENT_LOSS,                         │
+│      MAX_DISPATCH_LATENCY = 5 SECONDS,                                       │
+│      STARTUP_STATE = OFF                                                     │
+│  );                                                                          │
+│                                                                              │
+│  -- INICIAR/DETENER                                                          │
+│  ALTER EVENT SESSION NombreSesion ON SERVER STATE = START;                   │
+│  ALTER EVENT SESSION NombreSesion ON SERVER STATE = STOP;                    │
+│                                                                              │
+│  -- ELIMINAR                                                                 │
+│  DROP EVENT SESSION NombreSesion ON SERVER;                                  │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  📋 PLANTILLA: CONSULTAS LENTAS                                              │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  CREATE EVENT SESSION MonitorConsultasLentas                                 │
+│  ON SERVER                                                                   │
+│  ADD EVENT sqlserver.sql_statement_completed (                               │
+│      ACTION (                                                                │
+│          sqlserver.sql_text,                                                 │
+│          sqlserver.database_name,                                            │
+│          sqlserver.username,                                                 │
+│          sqlserver.client_app_name,                                          │
+│          sqlserver.query_hash                                                │
+│      )                                                                       │
+│      WHERE duration > 1000000           -- > 1 segundo (microsegundos)       │
+│        AND sqlserver.database_name = N'MiBaseDatos'                          │
+│  )                                                                           │
+│  ADD TARGET package0.ring_buffer (SET max_memory = 4096)                     │
+│  ADD TARGET package0.event_file (                                            │
+│      SET filename = N'C:\Temp\ConsultasLentas.xel',                          │
+│          max_file_size = 50,                                                 │
+│          max_rollover_files = 5                                              │
+│  )                                                                           │
+│  WITH (STARTUP_STATE = ON);                                                  │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  📋 PLANTILLA: CAPTURA DE DEADLOCKS                                          │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  CREATE EVENT SESSION CapturaDeadlocks                                       │
+│  ON SERVER                                                                   │
+│  ADD EVENT sqlserver.xml_deadlock_report (                                   │
+│      ACTION (sqlserver.database_name, sqlserver.username)                    │
+│  )                                                                           │
+│  ADD TARGET package0.ring_buffer (SET max_memory = 4096)                     │
+│  ADD TARGET package0.event_file (                                            │
+│      SET filename = N'C:\Temp\Deadlocks.xel',                                │
+│          max_file_size = 20,                                                 │
+│          max_rollover_files = 10                                             │
+│  )                                                                           │
+│  WITH (                                                                      │
+│      EVENT_RETENTION_MODE = NO_EVENT_LOSS,     -- No perder deadlocks        │
+│      MAX_DISPATCH_LATENCY = 1 SECONDS,         -- Escribir inmediato         │
+│      STARTUP_STATE = ON                                                      │
+│  );                                                                          │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  🔍 LEER DATOS DE RING_BUFFER                                                │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ;WITH XEventData AS (                                                       │
+│      SELECT CAST(target_data AS XML) AS TargetData                           │
+│      FROM sys.dm_xe_session_targets st                                       │
+│      INNER JOIN sys.dm_xe_sessions s                                         │
+│          ON s.address = st.event_session_address                             │
+│      WHERE s.name = 'NombreSesion'                                           │
+│        AND st.target_name = 'ring_buffer'                                    │
+│  )                                                                           │
+│  SELECT                                                                      │
+│      e.value('(@timestamp)[1]', 'datetime2') AS FechaHora,                   │
+│      e.value('(data[@name="duration"]/value)[1]', 'bigint')/1000 AS DurMS,   │
+│      e.value('(action[@name="sql_text"]/value)[1]', 'nvarchar(max)') AS SQL  │
+│  FROM XEventData                                                             │
+│  CROSS APPLY TargetData.nodes('RingBufferTarget/event') AS x(e)              │
+│  ORDER BY FechaHora DESC;                                                    │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  🔍 LEER ARCHIVOS .XEL                                                       │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  SELECT                                                                      │
+│      event_data.value('(@timestamp)[1]', 'datetime2') AS FechaHora,          │
+│      event_data.value('(data[@name="duration"]/value)[1]', 'bigint')/1000    │
+│          AS DuracionMS,                                                      │
+│      event_data.value('(action[@name="sql_text"]/value)[1]', 'nvarchar(max)')│
+│          AS SQL_Text                                                         │
+│  FROM sys.fn_xe_file_target_read_file(                                       │
+│      'C:\Temp\MiArchivo*.xel',   -- Patrón de archivos                       │
+│      NULL, NULL, NULL                                                        │
+│  ) AS f                                                                      │
+│  CROSS APPLY (SELECT CAST(event_data AS XML)) AS x(event_data)               │
+│  ORDER BY FechaHora DESC;                                                    │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  📊 COMANDOS DE ADMINISTRACIÓN                                               │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  -- Ver todas las sesiones                                                   │
+│  SELECT name, startup_state FROM sys.server_event_sessions;                  │
+│                                                                              │
+│  -- Ver sesiones activas (ejecutando)                                        │
+│  SELECT name FROM sys.dm_xe_sessions;                                        │
+│                                                                              │
+│  -- Ver eventos de una sesión                                                │
+│  SELECT event_name, event_predicate                                          │
+│  FROM sys.server_event_session_events                                        │
+│  WHERE event_session_id = (SELECT event_session_id                           │
+│      FROM sys.server_event_sessions WHERE name = 'MiSesion');                │
+│                                                                              │
+│  -- Ver todos los eventos disponibles                                        │
+│  SELECT p.name AS Package, o.name AS Event                                   │
+│  FROM sys.dm_xe_packages p                                                   │
+│  JOIN sys.dm_xe_objects o ON p.guid = o.package_guid                         │
+│  WHERE o.object_type = 'event';                                              │
+│                                                                              │
+│  -- Ver todas las acciones disponibles                                       │
+│  SELECT p.name AS Package, o.name AS Action                                  │
+│  FROM sys.dm_xe_packages p                                                   │
+│  JOIN sys.dm_xe_objects o ON p.guid = o.package_guid                         │
+│  WHERE o.object_type = 'action';                                             │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  ⚡ OPCIONES WITH                                                            │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  OPCIÓN                    │ DESCRIPCIÓN                                     │
+│  ──────────────────────────┼─────────────────────────────────────────────    │
+│  MAX_MEMORY                │ Memoria máxima para buffers (KB)                │
+│  EVENT_RETENTION_MODE      │ Qué hacer si se llena la memoria:               │
+│    ALLOW_SINGLE_EVENT_LOSS │   - Puede perder 1 evento (default)             │
+│    ALLOW_MULTIPLE_EVENT_LOSS│  - Puede perder varios eventos                 │
+│    NO_EVENT_LOSS           │   - Bloquea hasta escribir (cuidado!)           │
+│  MAX_DISPATCH_LATENCY      │ Máxima espera antes de escribir a target        │
+│  STARTUP_STATE             │ ON/OFF - Iniciar con SQL Server                 │
+│  TRACK_CAUSALITY           │ ON - Agregar GUID para correlacionar eventos    │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  🏦 APLICACIÓN BANCARIA                                                      │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ESCENARIOS TÍPICOS:                                                         │
+│                                                                              │
+│  • Core lento en horarios pico                                               │
+│    → sql_statement_completed con duration > 3000000 (3 seg)                  │
+│                                                                              │
+│  • Deadlocks en transferencias                                               │
+│    → xml_deadlock_report con STARTUP_STATE = ON                              │
+│                                                                              │
+│  • Auditoría de accesos sensibles                                            │
+│    → login_failed + login para compliance                                    │
+│                                                                              │
+│  • Errores de aplicación                                                     │
+│    → error_reported con severity >= 11                                       │
+│                                                                              │
+│  • Diagnóstico de esperas                                                    │
+│    → wait_completed para analizar cuellos de botella                         │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  🆚 PROFILER vs EXTENDED EVENTS                                              │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  CARACTERÍSTICA        │ SQL PROFILER    │ EXTENDED EVENTS                   │
+│  ──────────────────────┼─────────────────┼─────────────────────────────────  │
+│  Overhead              │ Alto (5-10%)    │ Bajo (<1%)                        │
+│  Azure SQL             │ No soportado    │ Soportado                         │
+│  Flexibilidad filtros  │ Limitada        │ Muy alta                          │
+│  Múltiples targets     │ No              │ Sí                                │
+│  Integración SSMS      │ Separada        │ Integrada (Object Explorer)       │
+│  Estado                │ DEPRECATED      │ RECOMENDADO                       │
+│  Automatización        │ Compleja        │ Fácil con T-SQL                   │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  ⚠️ UNIDADES DE TIEMPO                                                       │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ¡IMPORTANTE! Duration en XEvents está en MICROSEGUNDOS                      │
+│                                                                              │
+│  •  1 segundo    = 1,000,000 microsegundos                                   │
+│  •  500 ms       = 500,000 microsegundos                                     │
+│  •  100 ms       = 100,000 microsegundos                                     │
+│                                                                              │
+│  Para convertir a milisegundos: duration / 1000                              │
+│  Para convertir a segundos: duration / 1000000                               │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════════════════
+  Próxima Sesión: Execution Plans I - Index Scan vs Index Seek
+═══════════════════════════════════════════════════════════════════════════════

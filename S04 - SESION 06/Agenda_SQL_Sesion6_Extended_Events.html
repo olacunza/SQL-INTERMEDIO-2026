@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sesión 6 - Extended Events (XEvents)</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #1a1a2e;
+            color: #eee;
+            line-height: 1.6;
+        }
+        h1, h2, h3 {
+            color: #00d4ff;
+        }
+        h1 {
+            text-align: center;
+            border-bottom: 3px solid #00d4ff;
+            padding-bottom: 15px;
+        }
+        .section {
+            background: #16213e;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            border-left: 4px solid #00d4ff;
+        }
+        .warning {
+            background: #3d1f1f;
+            border-left: 4px solid #ff4757;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .tip {
+            background: #1f3d1f;
+            border-left: 4px solid #2ed573;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .bancario {
+            background: #3d3d1f;
+            border-left: 4px solid #ffa502;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        code {
+            background: #0d0d0d;
+            padding: 2px 8px;
+            border-radius: 4px;
+            color: #2ed573;
+            font-family: 'Consolas', monospace;
+        }
+        pre {
+            background: #0d0d0d;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            color: #2ed573;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border: 1px solid #444;
+        }
+        th {
+            background: #00d4ff;
+            color: #1a1a2e;
+        }
+        tr:nth-child(even) {
+            background: #0f3460;
+        }
+        .agenda {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+        .agenda-item {
+            background: #0f3460;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .agenda-item span {
+            display: block;
+            color: #00d4ff;
+            font-size: 0.9em;
+        }
+        .diagram {
+            background: #0d0d0d;
+            padding: 20px;
+            border-radius: 10px;
+            font-family: 'Consolas', monospace;
+            white-space: pre;
+            overflow-x: auto;
+            color: #00d4ff;
+            text-align: center;
+        }
+        .highlight {
+            color: #ffa502;
+            font-weight: bold;
+        }
+        .deprecated {
+            color: #ff4757;
+            text-decoration: line-through;
+            opacity: 0.7;
+        }
+        .recommended {
+            color: #2ed573;
+            font-weight: bold;
+        }
+        .comparison {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .comparison-item {
+            background: #0f3460;
+            padding: 15px;
+            border-radius: 8px;
+        }
+        .comparison-item.old {
+            border: 2px solid #ff4757;
+        }
+        .comparison-item.new {
+            border: 2px solid #2ed573;
+        }
+    </style>
+</head>
+<body>
+    <h1>⚡ Sesión 6: Extended Events (XEvents)</h1>
+    <p style="text-align: center; color: #888;">Semana 3 | SQL Server Intermedio | Enfoque: Monitoreo Ligero en Producción</p>
+
+    <div class="section">
+        <h2>📋 Agenda de la Sesión</h2>
+        <div class="agenda">
+            <div class="agenda-item">
+                <strong>Parte 1</strong>
+                <span>10 min</span>
+                Arquitectura de XEvents
+            </div>
+            <div class="agenda-item">
+                <strong>Parte 2</strong>
+                <span>15 min</span>
+                Crear Sesiones con T-SQL
+            </div>
+            <div class="agenda-item">
+                <strong>Parte 3</strong>
+                <span>10 min</span>
+                Targets: ring_buffer vs event_file
+            </div>
+            <div class="agenda-item">
+                <strong>Parte 4</strong>
+                <span>10 min</span>
+                Captura de Deadlocks y Errores
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>🎯 Objetivos de Aprendizaje</h2>
+        <ul>
+            <li>Entender la <strong>arquitectura</strong> de Extended Events: Sessions, Events, Actions, Predicates, Targets</li>
+            <li>Crear <strong>sesiones de monitoreo</strong> con T-SQL</li>
+            <li>Configurar <strong>ring_buffer</strong> para diagnóstico rápido y <strong>event_file</strong> para histórico</li>
+            <li>Aplicar <strong>predicados</strong> (filtros) para reducir overhead</li>
+            <li>Capturar <strong>deadlocks</strong> con grafo XML completo</li>
+            <li>Capturar <strong>errores</strong> por severidad para compliance</li>
+            <li>Leer y analizar datos capturados con <strong>XQuery</strong></li>
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>🆚 SQL Profiler vs Extended Events</h2>
+        
+        <div class="comparison">
+            <div class="comparison-item old">
+                <h3 style="color: #ff4757;">❌ SQL Profiler (Deprecated)</h3>
+                <ul>
+                    <li>Overhead alto (5-10%)</li>
+                    <li>No soportado en Azure SQL</li>
+                    <li>Filtros limitados</li>
+                    <li>Un solo destino de salida</li>
+                    <li>Interfaz separada</li>
+                </ul>
+            </div>
+            <div class="comparison-item new">
+                <h3 style="color: #2ed573;">✅ Extended Events (Recomendado)</h3>
+                <ul>
+                    <li>Overhead mínimo (&lt;1%)</li>
+                    <li>Soportado en Azure SQL</li>
+                    <li>Filtros muy flexibles (predicados)</li>
+                    <li>Múltiples targets simultáneos</li>
+                    <li>Integrado en SSMS</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="tip">
+            <strong>💡 Recomendación Microsoft:</strong> Extended Events es el sistema de monitoreo estándar desde SQL Server 2008. SQL Profiler está marcado como DEPRECATED y será removido en futuras versiones.
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>🏗️ Arquitectura de Extended Events</h2>
+        
+        <div class="diagram">
+┌─────────────────────────────────────────────────────────────────┐
+│                         EVENT SESSION                           │
+│                    (Contenedor Principal)                       │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│   ┌─────────────┐          ┌─────────────┐                     │
+│   │    EVENT    │          │   TARGET    │                     │
+│   │ (Qué capturar)│          │(Dónde guardar)│                   │
+│   └──────┬──────┘          └──────┬──────┘                     │
+│          │                        │                             │
+│     ┌────┴────┐              ┌────┴────────┐                   │
+│     ▼         ▼              ▼             ▼                   │
+│ ┌───────┐ ┌─────────┐  ┌───────────┐ ┌───────────┐            │
+│ │ACTION │ │PREDICATE│  │ring_buffer│ │event_file │            │
+│ │(+datos)│ │ (filtro)│  │ (memoria) │ │ (disco)   │            │
+│ └───────┘ └─────────┘  └───────────┘ └───────────┘            │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+FLUJO: Evento ocurre → Predicado evalúa → Si pasa:
+       Actions capturan datos → Target almacena
+        </div>
+
+        <table>
+            <tr>
+                <th>Componente</th>
+                <th>Descripción</th>
+                <th>Ejemplo</th>
+            </tr>
+            <tr>
+                <td><strong>SESSION</strong></td>
+                <td>Contenedor que agrupa todo</td>
+                <td><code>MonitorConsultasLentas</code></td>
+            </tr>
+            <tr>
+                <td><strong>EVENT</strong></td>
+                <td>Lo que queremos capturar</td>
+                <td><code>sql_statement_completed</code></td>
+            </tr>
+            <tr>
+                <td><strong>ACTION</strong></td>
+                <td>Datos adicionales a capturar</td>
+                <td><code>sql_text, database_name</code></td>
+            </tr>
+            <tr>
+                <td><strong>PREDICATE</strong></td>
+                <td>Filtro para reducir captura</td>
+                <td><code>WHERE duration > 1000000</code></td>
+            </tr>
+            <tr>
+                <td><strong>TARGET</strong></td>
+                <td>Destino de los datos</td>
+                <td><code>ring_buffer, event_file</code></td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="section">
+        <h2>🎪 Eventos Más Utilizados</h2>
+        
+        <table>
+            <tr>
+                <th>Categoría</th>
+                <th>Evento</th>
+                <th>Uso</th>
+            </tr>
+            <tr>
+                <td rowspan="3" style="vertical-align: top;"><strong>Performance</strong></td>
+                <td><code>sql_statement_completed</code></td>
+                <td>Todas las consultas SQL completadas</td>
+            </tr>
+            <tr>
+                <td><code>rpc_completed</code></td>
+                <td>Llamadas RPC desde aplicaciones</td>
+            </tr>
+            <tr>
+                <td><code>sp_statement_completed</code></td>
+                <td>Statements dentro de SPs</td>
+            </tr>
+            <tr>
+                <td rowspan="2" style="vertical-align: top;"><strong>Deadlocks</strong></td>
+                <td><code>xml_deadlock_report</code></td>
+                <td>Grafo XML completo del deadlock</td>
+            </tr>
+            <tr>
+                <td><code>lock_deadlock</code></td>
+                <td>Indica que ocurrió deadlock</td>
+            </tr>
+            <tr>
+                <td><strong>Errores</strong></td>
+                <td><code>error_reported</code></td>
+                <td>Errores por severidad</td>
+            </tr>
+            <tr>
+                <td rowspan="2" style="vertical-align: top;"><strong>Seguridad</strong></td>
+                <td><code>login</code></td>
+                <td>Login exitoso</td>
+            </tr>
+            <tr>
+                <td><code>login_failed</code></td>
+                <td>Login fallido</td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="section">
+        <h2>📦 Targets (Destinos)</h2>
+        
+        <div class="comparison">
+            <div class="comparison-item">
+                <h3>🔄 ring_buffer</h3>
+                <p><strong>Memoria circular (volátil)</strong></p>
+                <ul>
+                    <li>Datos en RAM (se pierden al reiniciar)</li>
+                    <li>Ideal para diagnóstico rápido</li>
+                    <li>Lectura inmediata con XQuery</li>
+                    <li>Tamaño limitado (MD típico: 4-8 MB)</li>
+                </ul>
+                <code>ADD TARGET package0.ring_buffer (SET max_memory = 4096)</code>
+            </div>
+            <div class="comparison-item">
+                <h3>📁 event_file</h3>
+                <p><strong>Archivo .xel en disco (persistente)</strong></p>
+                <ul>
+                    <li>Datos persistentes en archivos .xel</li>
+                    <li>Ideal para histórico y auditoría</li>
+                    <li>Soporta rollover automático</li>
+                    <li>Lectura con fn_xe_file_target_read_file</li>
+                </ul>
+                <code>ADD TARGET package0.event_file (SET filename = N'C:\Temp\Mi.xel')</code>
+            </div>
+        </div>
+
+        <div class="tip">
+            <strong>⚡ Tip:</strong> En producción, usa ambos targets: <code>ring_buffer</code> para consultas rápidas "¿qué está pasando ahora?" y <code>event_file</code> para histórico y análisis posterior.
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>🛠️ Sintaxis Básica</h2>
+        
+        <pre>
+-- CREAR SESIÓN
+CREATE EVENT SESSION MonitorBancoDB
+ON SERVER
+ADD EVENT sqlserver.sql_statement_completed (
+    ACTION (
+        sqlserver.sql_text,
+        sqlserver.database_name,
+        sqlserver.username
+    )
+    WHERE duration > 1000000              -- > 1 segundo (microsegundos)
+      AND sqlserver.database_name = N'BancoDB'
+)
+ADD TARGET package0.ring_buffer (SET max_memory = 4096)
+ADD TARGET package0.event_file (
+    SET filename = N'C:\Temp\BancoDB.xel',
+        max_file_size = 50,               -- 50 MB por archivo
+        max_rollover_files = 5            -- Máximo 5 archivos
+)
+WITH (
+    MAX_MEMORY = 4096 KB,
+    EVENT_RETENTION_MODE = ALLOW_SINGLE_EVENT_LOSS,
+    MAX_DISPATCH_LATENCY = 5 SECONDS,
+    STARTUP_STATE = ON                    -- Iniciar con SQL Server
+);
+
+-- INICIAR/DETENER
+ALTER EVENT SESSION MonitorBancoDB ON SERVER STATE = START;
+ALTER EVENT SESSION MonitorBancoDB ON SERVER STATE = STOP;
+
+-- ELIMINAR
+DROP EVENT SESSION MonitorBancoDB ON SERVER;
+        </pre>
+    </div>
+
+    <div class="section">
+        <h2>🔍 Leer Datos Capturados</h2>
+        
+        <h3>Desde ring_buffer (XQuery):</h3>
+        <pre>
+;WITH XEventData AS (
+    SELECT CAST(target_data AS XML) AS TargetData
+    FROM sys.dm_xe_session_targets st
+    INNER JOIN sys.dm_xe_sessions s 
+        ON s.address = st.event_session_address
+    WHERE s.name = 'MonitorBancoDB'
+      AND st.target_name = 'ring_buffer'
+)
+SELECT 
+    e.value('(@timestamp)[1]', 'datetime2') AS FechaHora,
+    e.value('(data[@name="duration"]/value)[1]', 'bigint') / 1000 AS DuracionMS,
+    e.value('(action[@name="sql_text"]/value)[1]', 'nvarchar(max)') AS SQL_Text
+FROM XEventData
+CROSS APPLY TargetData.nodes('RingBufferTarget/event') AS x(e)
+ORDER BY FechaHora DESC;
+        </pre>
+
+        <h3>Desde archivo .xel:</h3>
+        <pre>
+SELECT 
+    event_data.value('(@timestamp)[1]', 'datetime2') AS FechaHora,
+    event_data.value('(data[@name="duration"]/value)[1]', 'bigint') / 1000 AS DurMS
+FROM sys.fn_xe_file_target_read_file(
+    'C:\Temp\BancoDB*.xel', NULL, NULL, NULL
+) AS f
+CROSS APPLY (SELECT CAST(event_data AS XML)) AS x(event_data);
+        </pre>
+    </div>
+
+    <div class="bancario">
+        <h3>🏦 Aplicación Bancaria: Sesión de Producción</h3>
+        <p>
+            <strong>Escenario:</strong> Diseñar una sesión integral para el Core Bancario que capture:
+        </p>
+        <ul>
+            <li>✅ Consultas lentas (> 5 segundos)</li>
+            <li>✅ Todos los Deadlocks (grafo XML completo)</li>
+            <li>✅ Errores críticos (severity >= 16)</li>
+            <li>✅ Logins fallidos (para auditoría)</li>
+        </ul>
+        <p>
+            <strong>Configuración recomendada:</strong>
+        </p>
+        <ul>
+            <li><code>EVENT_RETENTION_MODE = NO_EVENT_LOSS</code> para deadlocks</li>
+            <li><code>STARTUP_STATE = ON</code> para que inicie automáticamente</li>
+            <li>Ring buffer de 8 MB + Event file de 500 MB (10 archivos x 50 MB)</li>
+        </ul>
+    </div>
+
+    <div class="warning">
+        <h3>⚠️ Unidades de Tiempo</h3>
+        <p>
+            <strong>¡IMPORTANTE!</strong> La duración en Extended Events está en <strong>MICROSEGUNDOS</strong>, no milisegundos:
+        </p>
+        <ul>
+            <li>1 segundo = 1,000,000 microsegundos</li>
+            <li>500 ms = 500,000 microsegundos</li>
+            <li>100 ms = 100,000 microsegundos</li>
+        </ul>
+        <p>Para convertir: <code>duration / 1000 = milisegundos</code></p>
+    </div>
+
+    <div class="section">
+        <h2>✅ Resumen de la Sesión</h2>
+        
+        <table>
+            <tr>
+                <th>Concepto</th>
+                <th>Descripción</th>
+            </tr>
+            <tr>
+                <td>SESSION</td>
+                <td>Contenedor que agrupa eventos y targets</td>
+            </tr>
+            <tr>
+                <td>EVENT</td>
+                <td>Lo que queremos capturar (sql_statement_completed, etc.)</td>
+            </tr>
+            <tr>
+                <td>ACTION</td>
+                <td>Datos adicionales (sql_text, database_name, etc.)</td>
+            </tr>
+            <tr>
+                <td>PREDICATE</td>
+                <td>Filtro WHERE para reducir captura</td>
+            </tr>
+            <tr>
+                <td>ring_buffer</td>
+                <td>Target en memoria para diagnóstico rápido</td>
+            </tr>
+            <tr>
+                <td>event_file</td>
+                <td>Target en disco para histórico (.xel)</td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="section">
+        <h2>📁 Archivos de la Sesión</h2>
+        <ul>
+            <li><code>1. Extended_Events.sql</code> - Script principal con teoría y demos</li>
+            <li><code>2. Ejercicios_XEvents.sql</code> - Ejercicios prácticos (básico a avanzado)</li>
+            <li><code>CheatSheet_XEvents.txt</code> - Referencia rápida</li>
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>➡️ Próxima Sesión (Sesión 7)</h2>
+        <h3>Execution Plans I - Análisis de Planes de Ejecución</h3>
+        <ul>
+            <li>Index Scan vs Index Seek</li>
+            <li>Identificación de Key Lookups costosos</li>
+            <li>Interpretación de operadores del plan</li>
+            <li>Uso de STATISTICS IO/TIME</li>
+        </ul>
+    </div>
+
+    <footer style="text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #444; color: #888;">
+        <p>SQL Server Intermedio 2026 | Sesión 6 de 16</p>
+        <p>Semana 3 - Extended Events (XEvents)</p>
+    </footer>
+</body>
+</html>
