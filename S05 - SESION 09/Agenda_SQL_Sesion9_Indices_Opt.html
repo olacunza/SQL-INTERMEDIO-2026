@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sesión 09: Optimización de Índices - SQL Intermedio 2026</title>
+    <style>
+        :root {
+            --primary: #0d9488;
+            --primary-dark: #0f766e;
+            --secondary: #f59e0b;
+            --bg: linear-gradient(135deg, #0c4a6e 0%, #164e63 50%, #115e59 100%);
+            --card-bg: rgba(255, 255, 255, 0.95);
+            --text: #1e293b;
+            --text-light: #64748b;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            min-height: 100vh;
+            padding: 2rem;
+            color: var(--text);
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        header {
+            background: var(--card-bg);
+            border-radius: 20px;
+            padding: 2rem 3rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+        
+        .session-badge {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            padding: 0.5rem 1.5rem;
+            border-radius: 50px;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        
+        h1 {
+            font-size: 2.2rem;
+            color: var(--primary-dark);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        h1::before {
+            content: "🔧";
+            font-size: 2rem;
+        }
+        
+        .meta-info {
+            display: flex;
+            gap: 2rem;
+            color: var(--text-light);
+            font-size: 0.95rem;
+        }
+        
+        .meta-info span {
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+        }
+        
+        .main-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 2rem;
+        }
+        
+        .card {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 1.8rem;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+        }
+        
+        .card h2 {
+            color: var(--primary-dark);
+            margin-bottom: 1.2rem;
+            padding-bottom: 0.8rem;
+            border-bottom: 2px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .agenda-timeline {
+            position: relative;
+            padding-left: 2rem;
+        }
+        
+        .agenda-timeline::before {
+            content: '';
+            position: absolute;
+            left: 6px;
+            top: 0;
+            bottom: 0;
+            width: 3px;
+            background: linear-gradient(to bottom, var(--primary), var(--secondary));
+            border-radius: 3px;
+        }
+        
+        .agenda-item {
+            position: relative;
+            padding: 1rem 0;
+            padding-left: 1rem;
+        }
+        
+        .agenda-item::before {
+            content: '';
+            position: absolute;
+            left: -24px;
+            top: 1.3rem;
+            width: 14px;
+            height: 14px;
+            background: var(--primary);
+            border-radius: 50%;
+            border: 3px solid white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+        
+        .agenda-item.break::before {
+            background: var(--secondary);
+        }
+        
+        .agenda-time {
+            font-size: 0.85rem;
+            color: var(--primary);
+            font-weight: 600;
+            display: block;
+            margin-bottom: 0.3rem;
+        }
+        
+        .agenda-title {
+            font-weight: 600;
+            color: var(--text);
+            font-size: 1.05rem;
+        }
+        
+        .agenda-desc {
+            font-size: 0.9rem;
+            color: var(--text-light);
+            margin-top: 0.3rem;
+        }
+        
+        .break-card {
+            background: linear-gradient(135deg, #fef3c7, #fde68a);
+            border-left: 4px solid var(--secondary);
+        }
+        
+        .objectives-list {
+            list-style: none;
+        }
+        
+        .objectives-list li {
+            padding: 0.7rem 0;
+            padding-left: 2rem;
+            position: relative;
+            border-bottom: 1px dashed #e2e8f0;
+        }
+        
+        .objectives-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .objectives-list li::before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: var(--primary);
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+        
+        .concept-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        
+        .concept-item {
+            background: #f8fafc;
+            border-radius: 12px;
+            padding: 1.2rem;
+            border-left: 4px solid var(--primary);
+        }
+        
+        .concept-item h4 {
+            color: var(--primary-dark);
+            margin-bottom: 0.5rem;
+            font-size: 0.95rem;
+        }
+        
+        .concept-item p {
+            font-size: 0.85rem;
+            color: var(--text-light);
+            line-height: 1.5;
+        }
+        
+        .threshold-table {
+            width: 100%;
+            margin-top: 1rem;
+            border-collapse: collapse;
+        }
+        
+        .threshold-table th {
+            background: var(--primary);
+            color: white;
+            padding: 0.8rem;
+            text-align: left;
+            font-size: 0.9rem;
+        }
+        
+        .threshold-table td {
+            padding: 0.7rem 0.8rem;
+            border-bottom: 1px solid #e2e8f0;
+            font-size: 0.9rem;
+        }
+        
+        .threshold-table tr:nth-child(even) {
+            background: #f8fafc;
+        }
+        
+        .action-ok {
+            color: #16a34a;
+            font-weight: 600;
+        }
+        
+        .action-warn {
+            color: #d97706;
+            font-weight: 600;
+        }
+        
+        .action-critical {
+            color: #dc2626;
+            font-weight: 600;
+        }
+        
+        .resources-list {
+            list-style: none;
+        }
+        
+        .resources-list li {
+            padding: 0.8rem;
+            margin: 0.5rem 0;
+            background: #f8fafc;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            transition: transform 0.2s;
+        }
+        
+        .resources-list li:hover {
+            transform: translateX(5px);
+        }
+        
+        .resources-list .icon {
+            width: 36px;
+            height: 36px;
+            background: var(--primary);
+            color: white;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+        }
+        
+        .fill-factor-visual {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+        
+        .ff-example {
+            flex: 1;
+            text-align: center;
+        }
+        
+        .ff-bar {
+            height: 60px;
+            background: #e2e8f0;
+            border-radius: 8px;
+            position: relative;
+            overflow: hidden;
+            margin-bottom: 0.5rem;
+        }
+        
+        .ff-fill {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(to top, var(--primary), var(--primary-dark));
+        }
+        
+        .ff-label {
+            font-size: 0.8rem;
+            color: var(--text-light);
+        }
+        
+        footer {
+            margin-top: 2rem;
+            text-align: center;
+            color: white;
+            opacity: 0.8;
+            font-size: 0.9rem;
+        }
+        
+        .comparison-box {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        
+        .compare-item {
+            padding: 1rem;
+            border-radius: 10px;
+            text-align: center;
+        }
+        
+        .compare-reorganize {
+            background: linear-gradient(135deg, #dbeafe, #bfdbfe);
+            border: 2px solid #3b82f6;
+        }
+        
+        .compare-rebuild {
+            background: linear-gradient(135deg, #dcfce7, #bbf7d0);
+            border: 2px solid #22c55e;
+        }
+        
+        .compare-item h4 {
+            font-size: 1rem;
+            margin-bottom: 0.8rem;
+        }
+        
+        .compare-item ul {
+            list-style: none;
+            font-size: 0.85rem;
+            text-align: left;
+        }
+        
+        .compare-item li {
+            padding: 0.3rem 0;
+        }
+        
+        @media (max-width: 900px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            header {
+                flex-direction: column;
+                text-align: center;
+            }
+            
+            .concept-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div>
+                <span class="session-badge">SEMANA 5 • SESIÓN 09</span>
+                <h1>Optimización de Índices</h1>
+                <p style="color: var(--text-light); margin-top: 0.5rem;">
+                    Fragmentación, REBUILD vs REORGANIZE, Fill Factor y Mantenimiento
+                </p>
+            </div>
+            <div class="meta-info">
+                <span>📅 Semana 5</span>
+                <span>⏱️ 2 horas</span>
+                <span>📊 Nivel: Intermedio-Avanzado</span>
+            </div>
+        </header>
+        
+        <div class="main-grid">
+            <div class="left-column">
+                <div class="card">
+                    <h2>📋 Agenda de la Sesión</h2>
+                    <div class="agenda-timeline">
+                        <div class="agenda-item">
+                            <span class="agenda-time">0:00 - 0:15</span>
+                            <div class="agenda-title">Anatomía del Índice B-Tree</div>
+                            <div class="agenda-desc">Estructura interna: root, intermediate y leaf pages. Conceptos de página y extent.</div>
+                        </div>
+                        
+                        <div class="agenda-item">
+                            <span class="agenda-time">0:15 - 0:35</span>
+                            <div class="agenda-title">Tipos de Fragmentación</div>
+                            <div class="agenda-desc">Fragmentación externa (lógica) vs interna. Page splits, causas y consecuencias.</div>
+                        </div>
+                        
+                        <div class="agenda-item">
+                            <span class="agenda-time">0:35 - 0:50</span>
+                            <div class="agenda-title">Midiendo Fragmentación con DMVs</div>
+                            <div class="agenda-desc">sys.dm_db_index_physical_stats: modos LIMITED, SAMPLED, DETAILED. Interpretación de métricas.</div>
+                        </div>
+                        
+                        <div class="agenda-item break">
+                            <span class="agenda-time">0:50 - 1:00</span>
+                            <div class="agenda-title">☕ Receso</div>
+                        </div>
+                        
+                        <div class="agenda-item">
+                            <span class="agenda-time">1:00 - 1:20</span>
+                            <div class="agenda-title">REBUILD vs REORGANIZE</div>
+                            <div class="agenda-desc">Cuándo usar cada uno. Opciones ONLINE, SORT_IN_TEMPDB. Umbrales recomendados.</div>
+                        </div>
+                        
+                        <div class="agenda-item">
+                            <span class="agenda-time">1:20 - 1:35</span>
+                            <div class="agenda-title">Fill Factor y PAD_INDEX</div>
+                            <div class="agenda-desc">Configuración según patrones de carga. Balance entre densidad y page splits.</div>
+                        </div>
+                        
+                        <div class="agenda-item">
+                            <span class="agenda-time">1:35 - 1:50</span>
+                            <div class="agenda-title">Índices Unused y Missing</div>
+                            <div class="agenda-desc">Detectar índices sin uso, duplicados. Evaluación de missing indexes.</div>
+                        </div>
+                        
+                        <div class="agenda-item">
+                            <span class="agenda-time">1:50 - 2:00</span>
+                            <div class="agenda-title">Plan de Mantenimiento BancoDB</div>
+                            <div class="agenda-desc">Diseño de estrategia de mantenimiento semanal/mensual para entorno bancario.</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card" style="margin-top: 2rem;">
+                    <h2>📊 Umbrales de Fragmentación</h2>
+                    <table class="threshold-table">
+                        <thead>
+                            <tr>
+                                <th>Fragmentación</th>
+                                <th>Estado</th>
+                                <th>Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>&lt; 5%</td>
+                                <td class="action-ok">✓ Óptimo</td>
+                                <td>No hacer nada</td>
+                            </tr>
+                            <tr>
+                                <td>5% - 30%</td>
+                                <td class="action-warn">⚠ Moderada</td>
+                                <td>ALTER INDEX ... REORGANIZE</td>
+                            </tr>
+                            <tr>
+                                <td>&gt; 30%</td>
+                                <td class="action-critical">✗ Severa</td>
+                                <td>ALTER INDEX ... REBUILD</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    
+                    <div class="comparison-box">
+                        <div class="compare-item compare-reorganize">
+                            <h4>🔄 REORGANIZE</h4>
+                            <ul>
+                                <li>✓ Online siempre</li>
+                                <li>✓ Interrumpible</li>
+                                <li>✓ Bloqueo mínimo</li>
+                                <li>✗ No cambia Fill Factor</li>
+                                <li>✗ No actualiza stats</li>
+                            </ul>
+                        </div>
+                        <div class="compare-item compare-rebuild">
+                            <h4>🔨 REBUILD</h4>
+                            <ul>
+                                <li>✓ Reconstrucción total</li>
+                                <li>✓ Actualiza estadísticas</li>
+                                <li>✓ Cambia Fill Factor</li>
+                                <li>⚠ Puede requerir ONLINE</li>
+                                <li>⚠ Más recursos</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card" style="margin-top: 2rem;">
+                    <h2>⚙️ Fill Factor por Escenario</h2>
+                    
+                    <div class="fill-factor-visual">
+                        <div class="ff-example">
+                            <div class="ff-bar">
+                                <div class="ff-fill" style="height: 100%;"></div>
+                            </div>
+                            <div class="ff-label"><strong>100%</strong><br>Solo lectura</div>
+                        </div>
+                        <div class="ff-example">
+                            <div class="ff-bar">
+                                <div class="ff-fill" style="height: 90%;"></div>
+                            </div>
+                            <div class="ff-label"><strong>90%</strong><br>OLTP mixto</div>
+                        </div>
+                        <div class="ff-example">
+                            <div class="ff-bar">
+                                <div class="ff-fill" style="height: 80%;"></div>
+                            </div>
+                            <div class="ff-label"><strong>80%</strong><br>INSERTs frecuentes</div>
+                        </div>
+                        <div class="ff-example">
+                            <div class="ff-bar">
+                                <div class="ff-fill" style="height: 70%;"></div>
+                            </div>
+                            <div class="ff-label"><strong>70%</strong><br>Muchos UPDATEs</div>
+                        </div>
+                    </div>
+                    
+                    <div class="concept-grid" style="margin-top: 1.5rem;">
+                        <div class="concept-item">
+                            <h4>📈 TRANSACCIONES_BANCARIAS</h4>
+                            <p>INSERTs secuenciales (por fecha). <strong>Fill Factor: 95%</strong> - mínima fragmentación natural.</p>
+                        </div>
+                        <div class="concept-item">
+                            <h4>💰 CUENTAS</h4>
+                            <p>UPDATEs frecuentes de saldo. <strong>Fill Factor: 85%</strong> - espacio para crecimiento.</p>
+                        </div>
+                        <div class="concept-item">
+                            <h4>👤 CLIENTES</h4>
+                            <p>Datos estables, pocas modificaciones. <strong>Fill Factor: 95-100%</strong> - máxima densidad.</p>
+                        </div>
+                        <div class="concept-item">
+                            <h4>📊 Índices NC</h4>
+                            <p>Más susceptibles a page splits. <strong>Fill Factor: 80%</strong> - margen prudente.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="right-column">
+                <div class="card">
+                    <h2>🎯 Objetivos</h2>
+                    <ul class="objectives-list">
+                        <li>Comprender la estructura B-Tree y cómo afecta el rendimiento</li>
+                        <li>Identificar y medir fragmentación con DMVs</li>
+                        <li>Aplicar REBUILD y REORGANIZE según umbrales</li>
+                        <li>Configurar Fill Factor según patrón de carga</li>
+                        <li>Detectar índices sin uso y duplicados</li>
+                        <li>Evaluar sugerencias de missing indexes</li>
+                        <li>Diseñar plan de mantenimiento automatizado</li>
+                    </ul>
+                </div>
+                
+                <div class="card" style="margin-top: 1.5rem;">
+                    <h2>🔑 DMVs Clave</h2>
+                    <div class="concept-grid" style="grid-template-columns: 1fr;">
+                        <div class="concept-item">
+                            <h4>dm_db_index_physical_stats</h4>
+                            <p>Fragmentación y uso de espacio de índices</p>
+                        </div>
+                        <div class="concept-item">
+                            <h4>dm_db_index_usage_stats</h4>
+                            <p>Estadísticas de uso (seeks, scans, updates)</p>
+                        </div>
+                        <div class="concept-item">
+                            <h4>dm_db_missing_index_*</h4>
+                            <p>Índices sugeridos por el optimizador</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card" style="margin-top: 1.5rem;">
+                    <h2>📁 Archivos de la Sesión</h2>
+                    <ul class="resources-list">
+                        <li>
+                            <span class="icon">📄</span>
+                            <div>
+                                <strong>1. Indices_Optimizacion.sql</strong>
+                                <div style="font-size: 0.8rem; color: var(--text-light);">Script principal con teoría y demos</div>
+                            </div>
+                        </li>
+                        <li>
+                            <span class="icon">✏️</span>
+                            <div>
+                                <strong>2. Ejercicios_Indices.sql</strong>
+                                <div style="font-size: 0.8rem; color: var(--text-light);">10 ejercicios prácticos + soluciones</div>
+                            </div>
+                        </li>
+                        <li>
+                            <span class="icon">📋</span>
+                            <div>
+                                <strong>CheatSheet_Indices_Opt.txt</strong>
+                                <div style="font-size: 0.8rem; color: var(--text-light);">Referencia rápida de comandos</div>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="card" style="margin-top: 1.5rem; background: linear-gradient(135deg, #fef3c7, #fde68a);">
+                    <h2 style="color: #92400e; border-color: #d97706;">⚠️ Mejores Prácticas</h2>
+                    <ul style="list-style: none; font-size: 0.9rem; color: #78350f;">
+                        <li style="padding: 0.4rem 0;">✓ Programar mantenimiento fuera de pico</li>
+                        <li style="padding: 0.4rem 0;">✓ Usar ONLINE = ON en producción</li>
+                        <li style="padding: 0.4rem 0;">✓ Actualizar stats después de REORGANIZE</li>
+                        <li style="padding: 0.4rem 0;">✗ No hacer REBUILD diario innecesario</li>
+                        <li style="padding: 0.4rem 0;">✗ No crear todos los missing indexes</li>
+                    </ul>
+                </div>
+                
+                <div class="card" style="margin-top: 1.5rem;">
+                    <h2>📅 Próxima Sesión</h2>
+                    <div style="padding: 1rem; background: #f8fafc; border-radius: 10px; text-align: center;">
+                        <div style="font-size: 0.85rem; color: var(--text-light);">SEMANA 5 • SESIÓN 10</div>
+                        <div style="font-size: 1.2rem; font-weight: 600; color: var(--primary-dark); margin: 0.5rem 0;">
+                            📦 Batching y Operaciones Masivas
+                        </div>
+                        <div style="font-size: 0.85rem; color: var(--text-light);">
+                            Procesamiento por lotes, MERGE, DELETE masivo, TRY_CONVERT
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <footer>
+            <p>SQL Server Intermedio 2026 • Sesión 09 de 16 • Optimización de Índices</p>
+        </footer>
+    </div>
+</body>
+</html>

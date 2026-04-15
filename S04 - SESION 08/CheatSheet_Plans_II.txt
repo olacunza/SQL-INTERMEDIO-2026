@@ -1,0 +1,324 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║           CHEATSHEET: EXECUTION PLANS II - QUERY HINTS                       ║
+║                     Referencia Rápida - Sesión 08                            ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  REGLA DE ORO SOBRE HINTS                                                    │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ⚠️ Los hints ANULAN la inteligencia del Query Optimizer.                   │
+│                                                                              │
+│  USAR HINTS SOLO CUANDO:                                                     │
+│  1. Has probado que el optimizer elige incorrectamente                       │
+│  2. Tienes evidencia con STATISTICS IO/TIME                                  │
+│  3. Las alternativas (índices, reescritura) no funcionan                     │
+│                                                                              │
+│  ORDEN DE PREFERENCIA:                                                       │
+│  1° Crear/mejorar índices                                                    │
+│  2° Reescribir la consulta                                                   │
+│  3° Actualizar estadísticas                                                  │
+│  4° ÚLTIMO RECURSO: Usar hints                                               │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  JOIN HINTS                                                                  │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  SINTAXIS: INNER [LOOP|HASH|MERGE] JOIN                                      │
+│                                                                              │
+│  ┌──────────────┬─────────────────────────────────────────────────────────┐  │
+│  │ HINT         │ MEJOR CUANDO                                            │  │
+│  ├──────────────┼─────────────────────────────────────────────────────────┤  │
+│  │ LOOP JOIN    │ Outer pequeño + índice en inner table                   │  │
+│  │ HASH JOIN    │ Sin índices, tablas grandes, mucha memoria              │  │
+│  │ MERGE JOIN   │ Ambas tablas ordenadas por columna de JOIN              │  │
+│  └──────────────┴─────────────────────────────────────────────────────────┘  │
+│                                                                              │
+│  EJEMPLOS:                                                                   │
+│  ┌────────────────────────────────────────────────────────────────────────┐  │
+│  │ SELECT * FROM A INNER LOOP JOIN B ON A.ID = B.ID;                      │  │
+│  │ SELECT * FROM A INNER HASH JOIN B ON A.ID = B.ID;                      │  │
+│  │ SELECT * FROM A INNER MERGE JOIN B ON A.ID = B.ID;                     │  │
+│  └────────────────────────────────────────────────────────────────────────┘  │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  TABLE HINTS - WITH (hint)                                                   │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  SINTAXIS: FROM Tabla WITH (hint1, hint2)                                    │
+│                                                                              │
+│  HINT               │ EFECTO                         │ RIESGO               │
+│  ═══════════════════│════════════════════════════════│══════════════════════│
+│  NOLOCK             │ Sin locks, dirty reads         │ 🔴 Datos incorrectos │
+│  READUNCOMMITTED    │ Igual que NOLOCK               │ 🔴 Datos incorrectos │
+│  READPAST           │ Salta filas bloqueadas         │ 🟡 Omite filas       │
+│  UPDLOCK            │ Lock de actualización al leer  │ 🟡 Más bloqueos      │
+│  HOLDLOCK           │ Lock hasta fin de TX           │ 🟡 Más bloqueos      │
+│  TABLOCK            │ Lock a nivel de tabla          │ 🔴 Much bloqueo      │
+│  INDEX(nombre)      │ Fuerza índice específico       │ 🟡 Plan subóptimo    │
+│  FORCESEEK          │ Fuerza Index Seek              │ 🟡 Plan subóptimo    │
+│  FORCESCAN          │ Fuerza Index Scan              │ 🟡 Plan subóptimo    │
+│                                                                              │
+│  EJEMPLOS:                                                                   │
+│  ┌────────────────────────────────────────────────────────────────────────┐  │
+│  │ SELECT * FROM Ordenes WITH (NOLOCK) WHERE Estado = 'Pendiente';        │  │
+│  │ SELECT * FROM Items WITH (INDEX(IX_Items_Precio)) WHERE Precio > 100;  │  │
+│  │ SELECT TOP 100 * FROM Cola WITH (READPAST, UPDLOCK);                   │  │
+│  └────────────────────────────────────────────────────────────────────────┘  │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  ⚠️ NOLOCK - RIESGOS DETALLADOS                                             │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  NOLOCK permite leer datos "sucios" (uncommitted). Puede causar:             │
+│                                                                              │
+│  1. DIRTY READS: Leer datos que luego se revierten (ROLLBACK)                │
+│  2. FILAS DUPLICADAS: Si hay page splits durante la lectura                  │
+│  3. FILAS FALTANTES: Si hay reacomodos de páginas                            │
+│  4. DATOS PARCIALES: Leer fila mientras se actualiza                         │
+│                                                                              │
+│  ❌ NUNCA USAR EN:                        ✅ ACEPTABLE EN:                   │
+│  • Cálculo de saldos financieros          • Reportes aproximados             │
+│  • Auditoría/compliance                   • Dashboards de tendencias         │
+│  • Inventario crítico                     • Estadísticas no críticas         │
+│  • Cualquier operación transaccional      • Búsquedas de texto               │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  OPTION CLAUSE - QUERY HINTS                                                 │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  SINTAXIS: SELECT ... FROM ... WHERE ... OPTION (hint1, hint2)               │
+│                                                                              │
+│  ┌───────────────────────────┬────────────────────────────────────────────┐  │
+│  │ HINT                       │ EFECTO                                    │  │
+│  ├───────────────────────────┼────────────────────────────────────────────┤  │
+│  │ RECOMPILE                  │ Genera nuevo plan cada ejecución          │  │
+│  │ OPTIMIZE FOR (var=valor)   │ Optimiza para valor específico            │  │
+│  │ OPTIMIZE FOR UNKNOWN       │ Usa distribución promedio                 │  │
+│  │ MAXDOP n                   │ Limita CPUs (1=serial, 0=todos)           │  │
+│  │ FORCE ORDER                │ Mantiene orden de JOINs como está escrito │  │
+│  │ USE PLAN 'xml'             │ Usa plan XML específico                   │  │
+│  │ QUERYTRACEON flag          │ Habilita trace flag para la consulta      │  │
+│  └───────────────────────────┴────────────────────────────────────────────┘  │
+│                                                                              │
+│  EJEMPLOS:                                                                   │
+│  ┌────────────────────────────────────────────────────────────────────────┐  │
+│  │ SELECT * FROM TX WHERE Tipo = @Tipo OPTION (RECOMPILE);                │  │
+│  │ SELECT * FROM TX WHERE Monto > @Min OPTION (OPTIMIZE FOR (@Min=5000)); │  │
+│  │ SELECT * FROM TX GROUP BY Tipo OPTION (MAXDOP 1);                      │  │
+│  │ SELECT * FROM A JOIN B JOIN C OPTION (FORCE ORDER);                    │  │
+│  └────────────────────────────────────────────────────────────────────────┘  │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  PARAMETER SNIFFING - PROBLEMA Y SOLUCIONES                                  │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ¿QUÉ ES?                                                                    │
+│  SQL compila el plan basándose en el PRIMER valor del parámetro.             │
+│  Si ese valor es atípico, el plan será subóptimo para otros valores.        │
+│                                                                              │
+│  SÍNTOMAS:                                                                   │
+│  • SP rápido a veces, lento otras                                            │
+│  • DBCC FREEPROCCACHE "arregla" temporalmente                                │
+│  • Rendimiento errático con mismos parámetros                                │
+│                                                                              │
+│  SOLUCIONES:                                                                 │
+│  ┌─────────────────────────┬──────────────────────────────────────────────┐  │
+│  │ SOLUCIÓN                 │ PRO/CONTRA                                  │  │
+│  ├─────────────────────────┼──────────────────────────────────────────────┤  │
+│  │ OPTION (RECOMPILE)       │ ✅ Siempre óptimo ❌ CPU extra cada vez     │  │
+│  │ OPTION (OPTIMIZE FOR)    │ ✅ Un solo compile ❌ Elegir valor correcto │  │
+│  │ OPTIMIZE FOR UNKNOWN     │ ✅ Usa promedios ❌ No siempre óptimo       │  │
+│  │ Variables locales        │ ✅ Simple ❌ Puede empeorar estimados       │  │
+│  │ Query Store Force        │ ✅ Sin cambiar código ❌ Mantenimiento      │  │
+│  │ Plan Guides              │ ✅ Sin cambiar código ❌ Mantenimiento      │  │
+│  └─────────────────────────┴──────────────────────────────────────────────┘  │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  RECOMPILE VS OPTIMIZE FOR - COMPARACIÓN                                     │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  OPTION (RECOMPILE):                                                         │
+│  ┌────────────────────────────────────────────────────────────────────────┐  │
+│  │ CREATE PROCEDURE sp_Buscar @ID INT AS                                  │  │
+│  │ BEGIN                                                                  │  │
+│  │     SELECT * FROM Tabla WHERE ID = @ID                                 │  │
+│  │     OPTION (RECOMPILE);  -- Nuevo plan CADA ejecución                  │  │
+│  │ END;                                                                   │  │
+│  └────────────────────────────────────────────────────────────────────────┘  │
+│  ✅ Siempre plan óptimo | ❌ Costo de compilación cada vez                  │
+│                                                                              │
+│  OPTION (OPTIMIZE FOR):                                                      │
+│  ┌────────────────────────────────────────────────────────────────────────┐  │
+│  │ CREATE PROCEDURE sp_Buscar @ID INT AS                                  │  │
+│  │ BEGIN                                                                  │  │
+│  │     SELECT * FROM Tabla WHERE ID = @ID                                 │  │
+│  │     OPTION (OPTIMIZE FOR (@ID = 500));  -- Plan optimizado para 500   │  │
+│  │ END;                                                                   │  │
+│  └────────────────────────────────────────────────────────────────────────┘  │
+│  ✅ Un solo compile | ❌ Debe elegir valor "típico" correcto                │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  QUERY STORE - COMANDOS PRINCIPALES                                          │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  -- Habilitar Query Store                                                    │
+│  ALTER DATABASE MiDB SET QUERY_STORE = ON;                                   │
+│                                                                              │
+│  -- Configurar Query Store                                                   │
+│  ALTER DATABASE MiDB SET QUERY_STORE (                                       │
+│      OPERATION_MODE = READ_WRITE,                                            │
+│      CLEANUP_POLICY = (STALE_QUERY_THRESHOLD_DAYS = 30),                     │
+│      MAX_STORAGE_SIZE_MB = 1000,                                             │
+│      QUERY_CAPTURE_MODE = AUTO                                               │
+│  );                                                                          │
+│                                                                              │
+│  -- Ver consultas y planes                                                   │
+│  SELECT * FROM sys.query_store_query;                                        │
+│  SELECT * FROM sys.query_store_plan;                                         │
+│  SELECT * FROM sys.query_store_runtime_stats;                                │
+│                                                                              │
+│  -- Forzar un plan                                                           │
+│  EXEC sp_query_store_force_plan @query_id = 1, @plan_id = 2;                 │
+│                                                                              │
+│  -- Quitar forcing                                                           │
+│  EXEC sp_query_store_unforce_plan @query_id = 1, @plan_id = 2;               │
+│                                                                              │
+│  -- Limpiar Query Store                                                      │
+│  ALTER DATABASE MiDB SET QUERY_STORE CLEAR;                                  │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  PLAN GUIDES - CREAR SIN MODIFICAR CÓDIGO                                    │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  -- Para un Stored Procedure (tipo OBJECT)                                   │
+│  EXEC sp_create_plan_guide                                                   │
+│      @name = N'PG_MiSP',                                                     │
+│      @stmt = N'SELECT ... consulta exacta ...',                              │
+│      @type = N'OBJECT',                                                      │
+│      @module_or_batch = N'dbo.MiStoredProcedure',                            │
+│      @params = NULL,                                                         │
+│      @hints = N'OPTION (RECOMPILE)';                                         │
+│                                                                              │
+│  -- Para consulta ad-hoc (tipo SQL)                                          │
+│  EXEC sp_create_plan_guide                                                   │
+│      @name = N'PG_Consulta',                                                 │
+│      @stmt = N'SELECT * FROM Tabla WHERE Col = @P',                          │
+│      @type = N'SQL',                                                         │
+│      @module_or_batch = NULL,                                                │
+│      @params = N'@P int',                                                    │
+│      @hints = N'OPTION (OPTIMIZE FOR (@P = 100))';                           │
+│                                                                              │
+│  -- Ver Plan Guides                                                          │
+│  SELECT * FROM sys.plan_guides;                                              │
+│                                                                              │
+│  -- Eliminar Plan Guide                                                      │
+│  EXEC sp_control_plan_guide @operation = N'DROP', @name = N'PG_MiSP';        │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  MAXDOP - GUÍA DE USO                                                        │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  MAXDOP 1 (Serial):                    MAXDOP > 1 (Paralelo):                │
+│  ────────────────────                  ────────────────────────              │
+│  • Consultas OLTP pequeñas             • Consultas analíticas grandes        │
+│  • Alta concurrencia                   • Procesamiento batch                 │
+│  • Evitar overhead de paralelismo      • Reportes pesados                    │
+│  • Cuando CPU es el cuello             • Cuando I/O es el cuello             │
+│                                                                              │
+│  EJEMPLO:                                                                    │
+│  ┌────────────────────────────────────────────────────────────────────────┐  │
+│  │ -- OLTP: Sin paralelismo                                               │  │
+│  │ SELECT * FROM Ordenes WHERE ID = 123 OPTION (MAXDOP 1);                │  │
+│  │                                                                        │  │
+│  │ -- Reporte: Paralelismo completo                                       │  │
+│  │ SELECT Region, SUM(Total) FROM Ventas GROUP BY Region OPTION(MAXDOP 0);│  │
+│  └────────────────────────────────────────────────────────────────────────┘  │
+│                                                                              │
+│  ⚡ TIP: Si CPU time > Elapsed time en paralelo = overhead excesivo          │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  FORCESEEK VS FORCESCAN                                                      │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  FORCESEEK:                            FORCESCAN:                            │
+│  ────────────────                      ─────────────                         │
+│  Fuerza Index Seek                     Fuerza Index Scan                     │
+│                                                                              │
+│  USAR FORCESEEK CUANDO:                USAR FORCESCAN CUANDO:                │
+│  • Hay buen índice pero SQL elige Scan • Seek + Key Lookup muy costoso       │
+│  • Estadísticas desactualizadas        • Retornando >30% de la tabla         │
+│  • Pocas filas esperadas               • Muchas filas esperadas              │
+│                                                                              │
+│  EJEMPLOS:                                                                   │
+│  ┌────────────────────────────────────────────────────────────────────────┐  │
+│  │ SELECT * FROM Clientes WITH (FORCESEEK) WHERE Nombre LIKE 'Z%';        │  │
+│  │ SELECT * FROM Clientes WITH (FORCESCAN) WHERE Activo = 1;  -- 80% son  │  │
+│  └────────────────────────────────────────────────────────────────────────┘  │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  CHECKLIST: CUÁNDO USAR CADA HINT                                            │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  □ RECOMPILE: Parámetros con valores muy variables                           │
+│  □ OPTIMIZE FOR: Parámetros con distribución conocida/típica                 │
+│  □ MAXDOP 1: Consultas OLTP pequeñas y frecuentes                            │
+│  □ FORCE ORDER: Cuando el orden de JOIN importa para el negocio              │
+│  □ FORCESEEK: Índice existe pero SQL elige Scan incorrectamente              │
+│  □ INDEX(x): Forzar índice específico cuando hay varios disponibles          │
+│  □ NOLOCK: SOLO para reportes aproximados no críticos                        │
+│  □ Query Store: Estabilizar planes sin cambiar código                        │
+│  □ Plan Guide: Agregar hints sin acceso al código fuente                     │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  DIAGNÓSTICO RÁPIDO DE PARAMETER SNIFFING                                    │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  1. ¿El SP varía mucho en rendimiento con mismos parámetros?                 │
+│     → Posible parameter sniffing                                             │
+│                                                                              │
+│  2. Verificar plan en cache:                                                 │
+│     SELECT * FROM sys.dm_exec_query_stats qs                                 │
+│     CROSS APPLY sys.dm_exec_sql_text(qs.sql_handle)                          │
+│     CROSS APPLY sys.dm_exec_query_plan(qs.plan_handle)                       │
+│     WHERE text LIKE '%NombreSP%';                                            │
+│                                                                              │
+│  3. Comparar Estimated vs Actual rows en plan real                           │
+│     → Gran diferencia = problema de sniffing o estadísticas                  │
+│                                                                              │
+│  4. Probar con DBCC FREEPROCCACHE (solo en pruebas!)                         │
+│     → Si mejora temporalmente = confirma parameter sniffing                  │
+│                                                                              │
+│  5. Solución rápida: OPTION (RECOMPILE)                                      │
+│     Solución estable: Query Store force plan                                 │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════════════════
+  SQL Server Intermedio 2026 - Sesión 08 - Execution Plans II
+  Próxima sesión: Optimización de Índices (Rebuild, Reorganize, Fill Factor)
+═══════════════════════════════════════════════════════════════════════════════

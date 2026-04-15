@@ -1,0 +1,283 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║           CHEATSHEET: EXECUTION PLANS I - SQL SERVER                         ║
+║                     Referencia Rápida - Sesión 07                            ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  ATAJOS DE TECLADO EN SSMS                                                   │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  Ctrl + L         Plan estimado (no ejecuta la consulta)                     │
+│  Ctrl + M         Habilitar plan real (luego F5 para ejecutar)               │
+│  Ctrl + M + F5    Plan real + ejecución                                      │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  PLAN ESTIMADO vs PLAN REAL                                                  │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ESTIMADO (Ctrl+L):                   REAL (Ctrl+M):                         │
+│  ─────────────────                    ──────────────                         │
+│  • NO ejecuta la consulta             • EJECUTA la consulta                  │
+│  • Muestra filas estimadas            • Muestra filas reales                 │
+│  • Basado en estadísticas             • Incluye tiempos reales               │
+│  • Rápido para análisis               • Muestra memory grants                │
+│  • Sin impacto en producción          • Warnings reales                      │
+│                                                                              │
+│  ⚠️ Si Estimated Rows ≠ Actual Rows → Estadísticas desactualizadas          │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  OPERADORES DE ACCESO A DATOS                                                │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  OPERADOR                 │ DESCRIPCIÓN                  │ RENDIMIENTO       │
+│  ═════════════════════════│══════════════════════════════│═══════════════════│
+│  TABLE SCAN               │ Lee toda la tabla (heap)     │ 🔴 Evitar         │
+│  CLUSTERED INDEX SCAN     │ Lee todo el clustered index  │ 🟡 Depende        │
+│  INDEX SCAN               │ Lee todo el non-clustered    │ 🟡 Depende        │
+│  CLUSTERED INDEX SEEK     │ Búsqueda directa clustered   │ 🟢 Bueno          │
+│  INDEX SEEK               │ Búsqueda directa non-clust   │ 🟢 Bueno          │
+│  KEY LOOKUP               │ Volver al clustered          │ 🔴 Costoso        │
+│  RID LOOKUP               │ Lookup en heap               │ 🔴 Costoso        │
+│                                                                              │
+│  REGLA: No todo Scan es malo, no todo Seek es bueno                          │
+│         Seek + Key Lookup en millones de filas = MUY MALO                    │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  INDEX SEEK vs INDEX SCAN                                                    │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  INDEX SEEK (🟢):                     INDEX SCAN (🟡):                       │
+│  ─────────────────                    ─────────────────                      │
+│  • Navega por B-Tree                  • Lee todas las páginas                │
+│  • Complejidad O(log n)               • Complejidad O(n)                     │
+│  • Pocas páginas leídas               • Muchas páginas leídas                │
+│  • Ideal para pocas filas             • Necesario sin índice adecuado        │
+│  • Requiere predicado SARGable        • O cuando retorna >20-30% filas       │
+│                                                                              │
+│  CUÁNDO SCAN ES ACEPTABLE:                                                   │
+│  • Retornar 80%+ de la tabla (más eficiente que muchos Seeks)                │
+│  • Operaciones de agregación sobre toda la tabla                             │
+│  • No hay índice útil disponible                                             │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  KEY LOOKUP - EL PROBLEMA Y LA SOLUCIÓN                                      │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ¿QUÉ ES?                                                                    │
+│  Cuando SQL usa índice non-clustered para filtrar pero necesita columnas    │
+│  que NO están en ese índice → va al clustered index por cada fila            │
+│                                                                              │
+│  PROBLEMA:                                                                   │
+│  10,000 filas = 10,000 Key Lookups adicionales = MUCHAS lecturas             │
+│                                                                              │
+│  SOLUCIÓN - COVERING INDEX:                                                  │
+│  ┌────────────────────────────────────────────────────────────────┐          │
+│  │ CREATE NONCLUSTERED INDEX IX_Nombre                            │          │
+│  │ ON Tabla(ColumnaFiltro)                                        │          │
+│  │ INCLUDE (Columna1, Columna2, Columna3);  -- Columnas extras    │          │
+│  └────────────────────────────────────────────────────────────────┘          │
+│                                                                              │
+│  EJEMPLO:                                                                    │
+│  -- Consulta: SELECT Monto, Fecha FROM TX WHERE TipoTX = 'Deposito'          │
+│  -- Índice: CREATE INDEX IX ON TX(TipoTX) INCLUDE(Monto, Fecha)              │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  STATISTICS IO - MÉTRICAS CLAVE                                              │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  SET STATISTICS IO ON;                                                       │
+│                                                                              │
+│  MÉTRICA            │ SIGNIFICADO                                            │
+│  ═══════════════════│════════════════════════════════════════════════════════│
+│  Scan count         │ Veces que se accedió al índice/tabla                   │
+│  Logical reads      │ Páginas leídas de buffer (memoria) ← MÁS IMPORTANTE    │
+│  Physical reads     │ Páginas leídas de disco (lento)                        │
+│  Read-ahead reads   │ Lecturas anticipadas (prefetch)                        │
+│  Lob logical reads  │ Lecturas de datos LOB                                  │
+│                                                                              │
+│  ⚡ OBJETIVO: Minimizar logical reads                                        │
+│                                                                              │
+│  Ejemplo de output:                                                          │
+│  Table 'TRANSACCIONES'. Scan count 1, logical reads 8500, physical reads 0   │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  STATISTICS TIME - INTERPRETACIÓN                                            │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  SET STATISTICS TIME ON;                                                     │
+│                                                                              │
+│  CPU time = 234 ms, elapsed time = 1250 ms                                   │
+│                                                                              │
+│  • CPU time: Tiempo de procesamiento puro                                    │
+│  • Elapsed time: Tiempo total (incluye esperas)                              │
+│                                                                              │
+│  ANÁLISIS:                                                                   │
+│  • Elapsed ≈ CPU → Sin esperas, todo es procesamiento                        │
+│  • Elapsed >> CPU → Hay esperas (I/O, bloqueos, paralelismo)                 │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  TIPOS DE JOIN FÍSICOS                                                       │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  TIPO          │ CUÁNDO SE USA                      │ REQUIERE               │
+│  ══════════════│════════════════════════════════════│════════════════════════│
+│  NESTED LOOPS  │ Outer pequeño + índice en inner    │ Índice en inner table  │
+│  HASH MATCH    │ Sin índices, muchas filas          │ Memoria (build hash)   │
+│  MERGE JOIN    │ Ambos lados ordenados              │ Datos pre-ordenados    │
+│                                                                              │
+│  NESTED LOOPS: Ideal para JOINs con filtros selectivos                       │
+│  HASH MATCH: Aparece cuando faltan índices (no siempre malo)                 │
+│  MERGE JOIN: Eficiente pero requiere orden previo                            │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  WARNINGS COMUNES EN PLANES (⚠️)                                             │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  WARNING               │ SIGNIFICADO                │ SOLUCIÓN               │
+│  ══════════════════════│════════════════════════════│════════════════════════│
+│  Missing Index         │ SQL sugiere crear índice   │ Evaluar y crear        │
+│  Implicit Conversion   │ Conversión rompe índice    │ Usar tipos correctos   │
+│  No Join Predicate     │ Producto cartesiano!       │ Revisar JOINs          │
+│  Spill to tempdb       │ Sort/Hash sin memoria      │ Más RAM o optimizar    │
+│  Residual Predicate    │ Filtro post-seek           │ Mejorar índice         │
+│  Memory Grant Warning  │ Memoria mal estimada       │ UPDATE STATISTICS      │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  IMPLICIT CONVERSION - PROBLEMA COMÚN                                        │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  PROBLEMA:                                                                   │
+│  -- Columna es VARCHAR pero buscamos con NVARCHAR                            │
+│  WHERE NumeroCuenta = N'CTA-001'  -- N' causa conversión                     │
+│                                                                              │
+│  RESULTADO: SQL convierte TODAS las filas → Index SCAN, no SEEK              │
+│                                                                              │
+│  SOLUCIÓN:                                                                   │
+│  -- Usar el mismo tipo de dato                                               │
+│  DECLARE @Num VARCHAR(20) = 'CTA-001';  -- Sin N                             │
+│  WHERE NumeroCuenta = @Num;                                                  │
+│                                                                              │
+│  REGLA: El parámetro debe coincidir con el tipo de la columna                │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  PREDICADOS SARGable vs NO SARGable                                          │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  SARGable (Search ARGument able) = Puede usar índice                         │
+│                                                                              │
+│  ✅ SARGable (USA ÍNDICE):          ❌ NO SARGable (NO USA):                 │
+│  ─────────────────────────          ─────────────────────────                │
+│  WHERE Columna = valor              WHERE YEAR(Columna) = 2024               │
+│  WHERE Columna > valor              WHERE Columna + 1 = valor                │
+│  WHERE Columna BETWEEN a AND b      WHERE UPPER(Columna) = 'ABC'             │
+│  WHERE Columna LIKE 'abc%'          WHERE Columna LIKE '%abc'                │
+│  WHERE Columna IN (a, b, c)         WHERE ISNULL(Col, 0) = valor             │
+│                                                                              │
+│  REGLA: No aplicar funciones a la columna, aplicar al valor                  │
+│                                                                              │
+│  MAL:  WHERE YEAR(Fecha) = 2024                                              │
+│  BIEN: WHERE Fecha >= '2024-01-01' AND Fecha < '2025-01-01'                  │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  SHOWPLAN OPTIONS                                                            │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  OPCIÓN             │ DESCRIPCIÓN                    │ EJECUTA?              │
+│  ═══════════════════│════════════════════════════════│═══════════════════════│
+│  SHOWPLAN_TEXT      │ Plan en texto (básico)         │ NO                    │
+│  SHOWPLAN_ALL       │ Texto con detalles de costo    │ NO                    │
+│  SHOWPLAN_XML       │ XML completo (más info)        │ NO                    │
+│  STATISTICS XML     │ Plan real en XML               │ SÍ                    │
+│  STATISTICS PROFILE │ Filas por operador             │ SÍ                    │
+│                                                                              │
+│  SET SHOWPLAN_XML ON;                                                        │
+│  GO                                                                          │
+│  SELECT * FROM Tabla WHERE Col = 1;                                          │
+│  GO                                                                          │
+│  SET SHOWPLAN_XML OFF;                                                       │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  CHECKLIST DE ANÁLISIS DE PLANES                                             │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  □ 1. Buscar operador con mayor % de costo                                   │
+│  □ 2. Verificar si hay Scans que deberían ser Seeks                          │
+│  □ 3. Buscar Key Lookups con muchas filas                                    │
+│  □ 4. Revisar flechas gruesas (muchas filas fluyendo)                        │
+│  □ 5. Buscar warnings (triángulo amarillo)                                   │
+│  □ 6. Comparar Estimated vs Actual rows                                      │
+│  □ 7. Revisar STATISTICS IO para lecturas reales                             │
+│  □ 8. Validar que no hay Implicit Conversions                                │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  DMVs PARA ANÁLISIS DE PLANES EN CACHE                                       │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  -- Consultas más costosas (por lecturas)                                    │
+│  SELECT TOP 10                                                               │
+│      total_logical_reads,                                                    │
+│      execution_count,                                                        │
+│      total_logical_reads / execution_count AS reads_por_ejecucion,           │
+│      SUBSTRING(st.text, 1, 200) AS consulta                                  │
+│  FROM sys.dm_exec_query_stats qs                                             │
+│  CROSS APPLY sys.dm_exec_sql_text(qs.sql_handle) st                          │
+│  ORDER BY total_logical_reads DESC;                                          │
+│                                                                              │
+│  -- Ver plan de una consulta específica                                      │
+│  SELECT qp.query_plan                                                        │
+│  FROM sys.dm_exec_query_stats qs                                             │
+│  CROSS APPLY sys.dm_exec_query_plan(qs.plan_handle) qp                       │
+│  CROSS APPLY sys.dm_exec_sql_text(qs.sql_handle) st                          │
+│  WHERE st.text LIKE '%MiConsulta%';                                          │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  COSTO: REGLAS IMPORTANTES                                                   │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  • El costo es una UNIDAD ABSTRACTA (no segundos ni MB)                      │
+│  • Sirve para COMPARAR operadores dentro del mismo plan                      │
+│  • Basado en estimaciones (CPU, I/O, memoria)                                │
+│  • Costo bajo ≠ consulta rápida (si estadísticas están mal)                  │
+│                                                                              │
+│  SUBTREE COST:                                                               │
+│  Costo acumulado = operador actual + todos sus hijos                         │
+│  El SELECT raíz muestra el costo total de la consulta                        │
+│                                                                              │
+│  SIEMPRE VALIDAR CON:                                                        │
+│  SET STATISTICS IO ON;   -- Lecturas reales                                  │
+│  SET STATISTICS TIME ON; -- Tiempos reales                                   │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════════════════
+  SQL Server Intermedio 2026 - Sesión 07 - Execution Plans I
+  Próxima sesión: Execution Plans II (Query Hints, OPTION, Plan Forcing)
+═══════════════════════════════════════════════════════════════════════════════

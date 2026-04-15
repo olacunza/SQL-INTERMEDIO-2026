@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sesión 7 - Execution Plans I</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #1a1a2e;
+            color: #eee;
+            line-height: 1.6;
+        }
+        h1, h2, h3 {
+            color: #00d4ff;
+        }
+        h1 {
+            text-align: center;
+            border-bottom: 3px solid #00d4ff;
+            padding-bottom: 15px;
+        }
+        .section {
+            background: #16213e;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            border-left: 4px solid #00d4ff;
+        }
+        .warning {
+            background: #3d1f1f;
+            border-left: 4px solid #ff4757;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .tip {
+            background: #1f3d1f;
+            border-left: 4px solid #2ed573;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .bancario {
+            background: #3d3d1f;
+            border-left: 4px solid #ffa502;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        code {
+            background: #0d0d0d;
+            padding: 2px 8px;
+            border-radius: 4px;
+            color: #2ed573;
+            font-family: 'Consolas', monospace;
+        }
+        pre {
+            background: #0d0d0d;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            color: #2ed573;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border: 1px solid #444;
+        }
+        th {
+            background: #00d4ff;
+            color: #1a1a2e;
+        }
+        tr:nth-child(even) {
+            background: #0f3460;
+        }
+        .agenda {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+        .agenda-item {
+            background: #0f3460;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .agenda-item span {
+            display: block;
+            color: #00d4ff;
+            font-size: 0.9em;
+        }
+        .diagram {
+            background: #0d0d0d;
+            padding: 20px;
+            border-radius: 10px;
+            font-family: 'Consolas', monospace;
+            white-space: pre;
+            overflow-x: auto;
+            color: #00d4ff;
+            text-align: center;
+        }
+        .highlight {
+            color: #ffa502;
+            font-weight: bold;
+        }
+        .good { color: #2ed573; font-weight: bold; }
+        .bad { color: #ff4757; font-weight: bold; }
+        .neutral { color: #ffa502; font-weight: bold; }
+        .keyboard {
+            display: inline-block;
+            background: #333;
+            border: 1px solid #555;
+            border-radius: 5px;
+            padding: 5px 12px;
+            margin: 3px;
+            font-family: 'Consolas', monospace;
+            font-size: 0.9em;
+            box-shadow: 0 2px 0 #111;
+        }
+        .operator-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 15px 0;
+        }
+        .operator-card {
+            background: #0f3460;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .operator-card.good {
+            border: 2px solid #2ed573;
+            color: inherit;
+            font-weight: normal;
+        }
+        .operator-card.bad {
+            border: 2px solid #ff4757;
+            color: inherit;
+            font-weight: normal;
+        }
+        .operator-card.neutral {
+            border: 2px solid #ffa502;
+            color: inherit;
+            font-weight: normal;
+        }
+        .operator-card h4 {
+            margin: 0 0 10px 0;
+            color: #00d4ff;
+        }
+    </style>
+</head>
+<body>
+    <h1>📊 Sesión 7: Execution Plans I</h1>
+    <p style="text-align: center; color: #888;">Semana 4 | SQL Server Intermedio | Análisis de Planes de Ejecución</p>
+
+    <div class="section">
+        <h2>📋 Agenda de la Sesión</h2>
+        <div class="agenda">
+            <div class="agenda-item">
+                <strong>Parte 1-2</strong>
+                <span>15 min</span>
+                Plan Estimado vs Real
+            </div>
+            <div class="agenda-item">
+                <strong>Parte 3-4</strong>
+                <span>15 min</span>
+                Operadores: Scan vs Seek
+            </div>
+            <div class="agenda-item">
+                <strong>Parte 5-6</strong>
+                <span>15 min</span>
+                Key Lookup + STATISTICS
+            </div>
+            <div class="agenda-item">
+                <strong>Parte 7-11</strong>
+                <span>15 min</span>
+                Warnings y Caso Práctico
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>🎯 Objetivos de Aprendizaje</h2>
+        <ul>
+            <li>Entender qué es un <strong>Plan de Ejecución</strong> y cómo el Query Optimizer lo genera</li>
+            <li>Diferenciar entre <strong>Plan Estimado</strong> y <strong>Plan Real</strong></li>
+            <li>Identificar operadores: <strong>Scan vs Seek</strong></li>
+            <li>Detectar y resolver <strong>Key Lookups</strong> costosos</li>
+            <li>Usar <strong>STATISTICS IO</strong> y <strong>STATISTICS TIME</strong></li>
+            <li>Reconocer <strong>warnings</strong> comunes en planes</li>
+            <li>Interpretar <strong>costos</strong> de manera correcta</li>
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>⌨️ Atajos de Teclado en SSMS</h2>
+        <table>
+            <tr>
+                <th style="width: 150px;">Atajo</th>
+                <th>Descripción</th>
+                <th>¿Ejecuta?</th>
+            </tr>
+            <tr>
+                <td><span class="keyboard">Ctrl</span> + <span class="keyboard">L</span></td>
+                <td>Ver <strong>Plan Estimado</strong> (basado en estadísticas)</td>
+                <td class="good">NO</td>
+            </tr>
+            <tr>
+                <td><span class="keyboard">Ctrl</span> + <span class="keyboard">M</span></td>
+                <td>Habilitar <strong>Plan Real</strong> (luego ejecutar con F5)</td>
+                <td>SÍ (con F5)</td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="section">
+        <h2>📊 Plan Estimado vs Plan Real</h2>
+        
+        <table>
+            <tr>
+                <th>Característica</th>
+                <th>Plan Estimado (Ctrl+L)</th>
+                <th>Plan Real (Ctrl+M+F5)</th>
+            </tr>
+            <tr>
+                <td>¿Ejecuta la consulta?</td>
+                <td class="good">NO</td>
+                <td class="bad">SÍ</td>
+            </tr>
+            <tr>
+                <td>Filas mostradas</td>
+                <td>Estimadas (estadísticas)</td>
+                <td>Reales (procesadas)</td>
+            </tr>
+            <tr>
+                <td>Tiempos</td>
+                <td>No disponibles</td>
+                <td>CPU + Elapsed reales</td>
+            </tr>
+            <tr>
+                <td>Memory grants</td>
+                <td>Estimados</td>
+                <td>Reales + warnings</td>
+            </tr>
+            <tr>
+                <td>Uso ideal</td>
+                <td>Análisis rápido en producción</td>
+                <td>Debugging detallado</td>
+            </tr>
+        </table>
+
+        <div class="warning">
+            <strong>⚠️ Regla de Oro:</strong> Si <code>Estimated Rows</code> difiere mucho de <code>Actual Rows</code>, las estadísticas están desactualizadas. Ejecuta <code>UPDATE STATISTICS</code>.
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>🔧 Operadores de Acceso a Datos</h2>
+        
+        <div class="operator-grid">
+            <div class="operator-card good">
+                <h4>🟢 CLUSTERED INDEX SEEK</h4>
+                <p>Búsqueda directa por clave del clustered index</p>
+                <code>WHERE ClienteID = 100</code>
+            </div>
+            <div class="operator-card good">
+                <h4>🟢 INDEX SEEK</h4>
+                <p>Búsqueda directa en índice non-clustered</p>
+                <code>WHERE Email = 'x@y.com'</code>
+            </div>
+            <div class="operator-card neutral">
+                <h4>🟡 CLUSTERED INDEX SCAN</h4>
+                <p>Lee TODO el índice clustered</p>
+                <code>SELECT * FROM Tabla</code>
+            </div>
+            <div class="operator-card neutral">
+                <h4>🟡 INDEX SCAN</h4>
+                <p>Lee TODO el índice non-clustered</p>
+                <code>WHERE Email LIKE '%@%'</code>
+            </div>
+            <div class="operator-card bad">
+                <h4>🔴 TABLE SCAN</h4>
+                <p>Lee TODA la tabla (heap sin índices)</p>
+                <code>Sin índice clustered</code>
+            </div>
+            <div class="operator-card bad">
+                <h4>🔴 KEY LOOKUP</h4>
+                <p>Volver al clustered por columnas faltantes</p>
+                <code>Índice no cubriente</code>
+            </div>
+        </div>
+
+        <div class="tip">
+            <strong>💡 Regla:</strong> No todo Scan es malo, no todo Seek es bueno. Un <code>Seek + Key Lookup</code> en millones de filas puede ser peor que un <code>Scan</code>.
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>🔍 Index Seek vs Index Scan</h2>
+        
+        <div class="diagram">
+                    INDEX SEEK (🟢)                          INDEX SCAN (🟡)
+                    ═══════════════                          ═════════════════
+
+          ┌───┐                                      ┌───┬───┬───┬───┬───┬───┐
+          │ 50│ ← Navega directamente                │ 1 │ 2 │ 3 │...│ n │ n+1│ ← Lee TODO
+          └─┬─┘                                      └───┴───┴───┴───┴───┴───┘
+            │
+       ┌────┴────┐                                   Complejidad: O(n)
+       ▼         ▼                                   Lecturas: TODAS las páginas
+   ┌───┬───┐ ┌───┬───┐
+   │48 │49 │ │50 │51 │ ← Pocas páginas
+   └───┴───┘ └───┴───┘
+
+   Complejidad: O(log n)
+   Lecturas: Solo las necesarias
+        </div>
+
+        <table>
+            <tr>
+                <th>Aspecto</th>
+                <th>INDEX SEEK</th>
+                <th>INDEX SCAN</th>
+            </tr>
+            <tr>
+                <td>Complejidad</td>
+                <td><span class="good">O(log n)</span></td>
+                <td><span class="neutral">O(n)</span></td>
+            </tr>
+            <tr>
+                <td>Páginas leídas</td>
+                <td>Pocas (solo necesarias)</td>
+                <td>Todas las del índice</td>
+            </tr>
+            <tr>
+                <td>Ideal para</td>
+                <td>Consultas selectivas (pocas filas)</td>
+                <td>Retornar gran % de la tabla</td>
+            </tr>
+            <tr>
+                <td>Requiere</td>
+                <td>Predicado SARGable</td>
+                <td>Nada especial</td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="section">
+        <h2>🔑 Key Lookup: El Enemigo Silencioso</h2>
+        
+        <div class="diagram">
+1. SQL usa índice NC para filtrar     2. Pero necesita columnas extra    3. Va al clustered por cada fila
+
+    INDEX NC                              CLUSTERED INDEX                     RESULTADO
+    ════════                              ═══════════════                     ═════════
+    ┌────────┐                            ┌─────────────┐                    
+    │TipoTX  │───────────────────────────▶│ * Todas las │                     10,000 filas
+    │= Dep   │        KEY LOOKUP          │   columnas  │                     = 10,000 
+    └────────┘                            └─────────────┘                     Key Lookups!
+        </div>
+
+        <h3>Problema:</h3>
+        <pre>
+-- Índice en TipoTransaccion solamente
+CREATE INDEX IX ON TX(TipoTransaccion);
+
+-- Consulta necesita Monto y Fecha (NO están en el índice)
+SELECT TipoTransaccion, Monto, FechaTransaccion  -- ← Key Lookup!
+FROM TRANSACCIONES_BANCARIAS
+WHERE TipoTransaccion = 'Depósito';</pre>
+
+        <h3>Solución - Covering Index:</h3>
+        <pre>
+-- Incluir las columnas adicionales
+CREATE INDEX IX ON TX(TipoTransaccion)
+INCLUDE (Monto, FechaTransaccion);  -- ← Sin Key Lookup!</pre>
+
+        <div class="warning">
+            <strong>⚠️ Impacto:</strong> Si la consulta retorna 10,000 filas, sin covering index = 10,000 Key Lookups adicionales = miles de lecturas extra.
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>📈 STATISTICS IO - Métricas Clave</h2>
+        
+        <pre>SET STATISTICS IO ON;
+-- Ejecutar consulta
+SET STATISTICS IO OFF;</pre>
+
+        <table>
+            <tr>
+                <th>Métrica</th>
+                <th>Significado</th>
+                <th>Objetivo</th>
+            </tr>
+            <tr>
+                <td><code>Scan count</code></td>
+                <td>Veces que se accedió al índice/tabla</td>
+                <td>Depende de la consulta</td>
+            </tr>
+            <tr>
+                <td><code>Logical reads</code></td>
+                <td>Páginas leídas de buffer (memoria)</td>
+                <td class="good">MINIMIZAR</td>
+            </tr>
+            <tr>
+                <td><code>Physical reads</code></td>
+                <td>Páginas leídas de disco</td>
+                <td class="good">Idealmente 0</td>
+            </tr>
+            <tr>
+                <td><code>Read-ahead reads</code></td>
+                <td>Lecturas anticipadas (prefetch)</td>
+                <td>OK si hay physical reads</td>
+            </tr>
+        </table>
+
+        <div class="tip">
+            <strong>💡 Consejo:</strong> <code>Logical reads</code> es la métrica más importante. Compara antes/después de crear índices.
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>⚠️ Warnings Comunes en Planes</h2>
+        
+        <table>
+            <tr>
+                <th>Warning</th>
+                <th>Causa</th>
+                <th>Solución</th>
+            </tr>
+            <tr>
+                <td>⚠️ Missing Index</td>
+                <td>SQL sugiere crear un índice</td>
+                <td>Evaluar y crear el índice sugerido</td>
+            </tr>
+            <tr>
+                <td>⚠️ Implicit Conversion</td>
+                <td>Tipo de dato no coincide</td>
+                <td>Usar el tipo correcto en parámetros</td>
+            </tr>
+            <tr>
+                <td>⚠️ No Join Predicate</td>
+                <td>Producto cartesiano accidental</td>
+                <td>Revisar cláusulas JOIN</td>
+            </tr>
+            <tr>
+                <td>⚠️ Spill to tempdb</td>
+                <td>Sort/Hash sin memoria suficiente</td>
+                <td>Más RAM o optimizar consulta</td>
+            </tr>
+            <tr>
+                <td>⚠️ Residual Predicate</td>
+                <td>Filtro adicional post-seek</td>
+                <td>Mejorar el índice</td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="section">
+        <h2>❌ Implicit Conversion</h2>
+        
+        <p>Cuando el tipo de dato del parámetro no coincide con la columna, SQL debe convertir TODAS las filas:</p>
+
+        <pre>
+-- ❌ MALO: Columna es VARCHAR pero parámetro es NVARCHAR
+DECLARE @Num NVARCHAR(20) = N'CTA-001';  -- N' indica Unicode
+WHERE NumeroCuenta = @Num;  -- Causa SCAN, no SEEK
+
+-- ✅ BUENO: Mismo tipo de dato
+DECLARE @Num VARCHAR(20) = 'CTA-001';  -- Sin N
+WHERE NumeroCuenta = @Num;  -- Usa SEEK correctamente</pre>
+
+        <div class="warning">
+            <strong>⚠️ Regla:</strong> El tipo del parámetro DEBE coincidir con el tipo de la columna para usar índices eficientemente.
+        </div>
+    </div>
+
+    <div class="bancario">
+        <h3>🏦 Aplicación Bancaria: El Reporte Lento</h3>
+        <p><strong>Escenario:</strong> El reporte de "Estado de Cuenta" tarda 850ms y necesitamos bajarlo a &lt;100ms.</p>
+        
+        <p><strong>Análisis del plan revela:</strong></p>
+        <ul>
+            <li>❌ Index Scan en CUENTAS (falta índice en ClienteID)</li>
+            <li>❌ Key Lookup masivo en TRANSACCIONES</li>
+            <li>❌ Sort para ORDER BY (sin índice de soporte)</li>
+        </ul>
+        
+        <p><strong>Solución:</strong></p>
+        <pre>
+-- Índice cubriente para CUENTAS
+CREATE INDEX IX_CUENTAS_ClienteID
+ON CUENTAS(ClienteID)
+INCLUDE (NumeroCuenta, TipoCuenta, Saldo);
+
+-- Índice cubriente para TRANSACCIONES
+CREATE INDEX IX_TX_CuentaFecha
+ON TRANSACCIONES_BANCARIAS(CuentaID, FechaTransaccion DESC)
+INCLUDE (TipoTransaccion, Monto, Descripcion);</pre>
+        
+        <p><strong>Resultado:</strong> De 850ms → 45ms (mejora de 19x)</p>
+    </div>
+
+    <div class="section">
+        <h2>📏 Interpretación de Costos</h2>
+        
+        <ul>
+            <li>El <strong>costo</strong> es una unidad <em>abstracta</em> (no segundos ni MB)</li>
+            <li>Sirve para <strong>comparar operadores</strong> dentro del mismo plan</li>
+            <li>Basado en <strong>estimaciones</strong> de CPU, I/O, memoria</li>
+            <li><strong>Costo bajo ≠ consulta rápida</strong> (si estadísticas están mal)</li>
+        </ul>
+
+        <div class="tip">
+            <strong>💡 Siempre validar con:</strong>
+            <pre>SET STATISTICS IO ON;   -- Lecturas reales
+SET STATISTICS TIME ON; -- Tiempos reales</pre>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>✅ Resumen de la Sesión</h2>
+        
+        <table>
+            <tr>
+                <th>Concepto</th>
+                <th>Clave</th>
+            </tr>
+            <tr>
+                <td>Plan Estimado vs Real</td>
+                <td>Ctrl+L (no ejecuta) vs Ctrl+M (ejecuta)</td>
+            </tr>
+            <tr>
+                <td>Seek vs Scan</td>
+                <td>Seek = búsqueda directa, Scan = lee todo</td>
+            </tr>
+            <tr>
+                <td>Key Lookup</td>
+                <td>Solución: INCLUDE columnas en índice</td>
+            </tr>
+            <tr>
+                <td>STATISTICS IO</td>
+                <td>Logical reads = métrica principal</td>
+            </tr>
+            <tr>
+                <td>Implicit Conversion</td>
+                <td>Tipos deben coincidir</td>
+            </tr>
+            <tr>
+                <td>Costo</td>
+                <td>Es estimado, siempre validar con IO/TIME</td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="section">
+        <h2>📁 Archivos de la Sesión</h2>
+        <ul>
+            <li><code>1. Execution_Plans_I.sql</code> - Script principal con teoría y demos</li>
+            <li><code>2. Ejercicios_Plans.sql</code> - Ejercicios prácticos (análisis de planes)</li>
+            <li><code>CheatSheet_Plans.txt</code> - Referencia rápida</li>
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>➡️ Próxima Sesión (Sesión 8)</h2>
+        <h3>Execution Plans II - Query Hints y OPTION</h3>
+        <ul>
+            <li>Query hints (FORCE ORDER, LOOP JOIN, HASH JOIN)</li>
+            <li>OPTION (RECOMPILE, OPTIMIZE FOR)</li>
+            <li>Plan forcing y Query Store</li>
+            <li>Parameter sniffing y soluciones</li>
+        </ul>
+    </div>
+
+    <footer style="text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #444; color: #888;">
+        <p>SQL Server Intermedio 2026 | Sesión 7 de 16</p>
+        <p>Semana 4 - Execution Plans I (Análisis de Planes de Ejecución)</p>
+    </footer>
+</body>
+</html>

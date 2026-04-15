@@ -1,0 +1,343 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║         CHEATSHEET: OPTIMIZACIÓN DE ÍNDICES - SQL SERVER                     ║
+║                    Sesión 09 - SQL Intermedio 2026                           ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+================================================================================
+ 1. ANATOMÍA DEL ÍNDICE B-TREE
+================================================================================
+
+    ┌──────────────────────────────────────────────────────────────────────────┐
+    │                         ESTRUCTURA B-TREE                                │
+    ├──────────────────────────────────────────────────────────────────────────┤
+    │                                                                          │
+    │                         ┌─────────────┐                                  │
+    │                         │  ROOT PAGE  │ ← Punto de entrada               │
+    │                         └──────┬──────┘                                  │
+    │                    ┌───────────┼───────────┐                             │
+    │              ┌─────▼─────┐ ┌───▼───┐ ┌─────▼─────┐                       │
+    │              │INTERMEDIATE│INTERMED│ │INTERMEDIATE│ ← Navegación         │
+    │              └─────┬─────┘└───┬───┘ └─────┬─────┘                        │
+    │            ┌───────┴───────┐  │   ┌───────┴───────┐                      │
+    │         ┌──▼──┐┌──▼──┐┌──▼──┐│ ┌──▼──┐┌──▼──┐┌──▼──┐                    │
+    │         │LEAF ││LEAF ││LEAF ││ │LEAF ││LEAF ││LEAF │ ← Datos/Punteros   │
+    │         └─────┘└─────┘└─────┘│ └─────┘└─────┘└─────┘                     │
+    │                              │                                           │
+    └──────────────────────────────────────────────────────────────────────────┘
+
+    CONCEPTOS CLAVE:
+    • Page Size: 8KB fijo
+    • Extent: 8 páginas contiguas (64KB)
+    • Leaf Level: Contiene datos (clustered) o punteros (non-clustered)
+
+
+================================================================================
+ 2. TIPOS DE FRAGMENTACIÓN
+================================================================================
+
+    ┌────────────────────────────────────────────────────────────────────────┐
+    │                   FRAGMENTACIÓN EXTERNA (Lógica)                       │
+    ├────────────────────────────────────────────────────────────────────────┤
+    │ • Páginas fuera de orden lógico en disco                               │
+    │ • Medida: avg_fragmentation_in_percent                                 │
+    │ • Afecta: Lecturas secuenciales (scans)                                │
+    │ • Solución: REBUILD o REORGANIZE                                       │
+    └────────────────────────────────────────────────────────────────────────┘
+
+    ┌────────────────────────────────────────────────────────────────────────┐
+    │                   FRAGMENTACIÓN INTERNA                                │
+    ├────────────────────────────────────────────────────────────────────────┤
+    │ • Espacio desperdiciado dentro de páginas                              │
+    │ • Medida: avg_page_space_used_in_percent < 100                         │
+    │ • Afecta: Más páginas = más I/O                                        │
+    │ • Solución: REBUILD con Fill Factor apropiado                          │
+    └────────────────────────────────────────────────────────────────────────┘
+
+    CAUSAS DE FRAGMENTACIÓN:
+    ✗ INSERTs aleatorios (no secuenciales)
+    ✗ UPDATEs que cambian tamaño del registro
+    ✗ DELETEs que dejan huecos
+    ✗ Page Splits
+
+
+================================================================================
+ 3. MEDIR FRAGMENTACIÓN - DMV
+================================================================================
+
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │ sys.dm_db_index_physical_stats(database_id, object_id, index_id,       │
+    │                                 partition_number, mode)                 │
+    └─────────────────────────────────────────────────────────────────────────┘
+
+    MODOS DE ANÁLISIS:
+    ┌──────────┬────────────────────────────────────────────────────────────┐
+    │ LIMITED  │ Rápido, solo páginas no-hoja (recomendado para monitoreo) │
+    │ SAMPLED  │ Muestreo ~1% de páginas                                   │
+    │ DETAILED │ Todas las páginas (lento, más preciso)                    │
+    └──────────┴────────────────────────────────────────────────────────────┘
+
+    COLUMNAS IMPORTANTES:
+    • avg_fragmentation_in_percent  → Fragmentación lógica
+    • avg_page_space_used_in_percent → Uso interno de páginas
+    • page_count                     → Total de páginas
+    • record_count                   → Total de registros
+    • fragment_count                 → Número de fragmentos
+
+    QUERY RÁPIDA:
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │ SELECT OBJECT_NAME(object_id), index_id,                               │
+    │        avg_fragmentation_in_percent, page_count                        │
+    │ FROM sys.dm_db_index_physical_stats(DB_ID(), NULL, NULL, NULL, 'LIMITED')│
+    │ WHERE page_count > 100 AND avg_fragmentation_in_percent > 5;           │
+    └─────────────────────────────────────────────────────────────────────────┘
+
+
+================================================================================
+ 4. REBUILD VS REORGANIZE
+================================================================================
+
+    ╔════════════════════╦═══════════════════════╦═══════════════════════════╗
+    ║ CARACTERÍSTICA     ║ REORGANIZE            ║ REBUILD                   ║
+    ╠════════════════════╬═══════════════════════╬═══════════════════════════╣
+    ║ Qué hace           ║ Reordena páginas hoja ║ Reconstruye completo      ║
+    ║ Bloqueo            ║ Mínimo (online)       ║ Puede ser exclusivo       ║
+    ║ Transaccional      ║ Sí (interrumpible)    ║ No (todo o nada)          ║
+    ║ Actualiza stats    ║ NO                    ║ SÍ                        ║
+    ║ Fill Factor        ║ No puede cambiar      ║ Puede especificar         ║
+    ║ Compactación       ║ Parcial               ║ Completa                  ║
+    ║ Uso tempdb         ║ Mínimo                ║ Puede ser alto            ║
+    ║ Cuándo usar        ║ Frag 5-30%            ║ Frag >30%                 ║
+    ╚════════════════════╩═══════════════════════╩═══════════════════════════╝
+
+    REGLA DE ORO:
+    ┌────────────────────────────────────────────────────────────────────────┐
+    │  < 5%  fragmentación  →  NO HACER NADA                                 │
+    │  5-30% fragmentación  →  REORGANIZE                                    │
+    │  > 30% fragmentación  →  REBUILD                                       │
+    └────────────────────────────────────────────────────────────────────────┘
+
+    SINTAXIS:
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │ -- REORGANIZE (un índice)                                              │
+    │ ALTER INDEX IX_Nombre ON Tabla REORGANIZE;                             │
+    │                                                                         │
+    │ -- REORGANIZE (todos los índices)                                      │
+    │ ALTER INDEX ALL ON Tabla REORGANIZE;                                   │
+    │                                                                         │
+    │ -- REBUILD (un índice)                                                 │
+    │ ALTER INDEX IX_Nombre ON Tabla REBUILD;                                │
+    │                                                                         │
+    │ -- REBUILD con opciones (Enterprise)                                   │
+    │ ALTER INDEX IX_Nombre ON Tabla REBUILD                                 │
+    │ WITH (FILLFACTOR = 80, ONLINE = ON, SORT_IN_TEMPDB = ON);             │
+    │                                                                         │
+    │ -- REBUILD todos                                                       │
+    │ ALTER INDEX ALL ON Tabla REBUILD WITH (FILLFACTOR = 90);              │
+    └─────────────────────────────────────────────────────────────────────────┘
+
+
+================================================================================
+ 5. FILL FACTOR
+================================================================================
+
+    ┌────────────────────────────────────────────────────────────────────────┐
+    │ Fill Factor = % de espacio a usar en páginas HOJA al crear/rebuild    │
+    └────────────────────────────────────────────────────────────────────────┘
+
+    VALORES Y COMPORTAMIENTO:
+    ┌────────────┬───────────────────────────────────────────────────────────┐
+    │ 100 ó 0    │ Páginas 100% llenas (máxima densidad)                    │
+    │ 90         │ 90% lleno, 10% libre para nuevos registros               │
+    │ 80         │ 80% lleno, 20% libre                                     │
+    │ 70         │ 70% lleno, 30% libre (alto margen)                       │
+    └────────────┴───────────────────────────────────────────────────────────┘
+
+    RECOMENDACIONES POR ESCENARIO:
+    ┌───────────────────────────────┬────────────┬──────────────────────────┐
+    │ ESCENARIO                     │ FILL FACTOR│ RAZÓN                    │
+    ├───────────────────────────────┼────────────┼──────────────────────────┤
+    │ Tabla solo lectura            │ 100        │ Máxima densidad          │
+    │ INSERTs secuenciales (IDENTITY)│ 95-100    │ Nuevos al final          │
+    │ INSERTs aleatorios            │ 70-80     │ Espacio para nuevos      │
+    │ Muchos UPDATEs de tamaño      │ 60-70     │ Espacio para crecimiento │
+    │ OLTP mixto normal             │ 80-90     │ Balance general          │
+    └───────────────────────────────┴────────────┴──────────────────────────┘
+
+    PAD_INDEX:
+    • Aplica Fill Factor también a páginas INTERMEDIAS
+    • Útil en índices muy profundos con muchas actualizaciones
+
+    SINTAXIS:
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │ CREATE INDEX IX_Demo ON Tabla(Columna) WITH (FILLFACTOR = 80);         │
+    │                                                                         │
+    │ ALTER INDEX IX_Demo ON Tabla REBUILD WITH (FILLFACTOR = 85, PAD_INDEX=ON);│
+    └─────────────────────────────────────────────────────────────────────────┘
+
+
+================================================================================
+ 6. USO DE ÍNDICES - DMV
+================================================================================
+
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │ sys.dm_db_index_usage_stats                                            │
+    └─────────────────────────────────────────────────────────────────────────┘
+
+    COLUMNAS IMPORTANTES:
+    ┌────────────────┬────────────────────────────────────────────────────────┐
+    │ user_seeks     │ Búsquedas usando el índice (bueno)                    │
+    │ user_scans     │ Escaneos completos del índice                         │
+    │ user_lookups   │ Key Lookups (solo clustered)                          │
+    │ user_updates   │ Modificaciones (INSERT/UPDATE/DELETE)                 │
+    └────────────────┴────────────────────────────────────────────────────────┘
+
+    ÍNDICE SALUDABLE:
+    ✓ (Seeks + Scans + Lookups) >> Updates
+
+    ÍNDICE PROBLEMÁTICO:
+    ✗ Updates >> (Seeks + Scans + Lookups)
+
+    ⚠ IMPORTANTE: Estadísticas se resetean al reiniciar SQL Server
+
+
+================================================================================
+ 7. ÍNDICES SIN USAR Y DUPLICADOS
+================================================================================
+
+    DETECTAR ÍNDICES SIN USO:
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │ SELECT OBJECT_NAME(i.object_id) AS Tabla, i.name AS Indice             │
+    │ FROM sys.indexes i                                                      │
+    │ LEFT JOIN sys.dm_db_index_usage_stats us                               │
+    │     ON i.object_id = us.object_id AND i.index_id = us.index_id         │
+    │ WHERE i.type_desc = 'NONCLUSTERED'                                     │
+    │   AND (us.user_seeks IS NULL OR                                        │
+    │        us.user_seeks + us.user_scans + us.user_lookups = 0);           │
+    └─────────────────────────────────────────────────────────────────────────┘
+
+    IMPACTO DE ÍNDICES INNECESARIOS:
+    ✗ Espacio en disco desperdiciado
+    ✗ I/O extra en cada INSERT/UPDATE/DELETE
+    ✗ Mayor tiempo de backup/restore
+    ✗ Contención de bloqueos
+
+
+================================================================================
+ 8. MISSING INDEXES
+================================================================================
+
+    DMVs PARA ÍNDICES SUGERIDOS:
+    ┌─────────────────────────────────────────┬───────────────────────────────┐
+    │ sys.dm_db_missing_index_details         │ Detalle (columnas)            │
+    │ sys.dm_db_missing_index_groups          │ Agrupación                    │
+    │ sys.dm_db_missing_index_group_stats     │ Estadísticas de impacto       │
+    └─────────────────────────────────────────┴───────────────────────────────┘
+
+    COLUMNAS IMPORTANTES:
+    • equality_columns   → Columnas usadas con = 
+    • inequality_columns → Columnas usadas con <, >, BETWEEN
+    • included_columns   → Columnas para INCLUDE
+    • avg_user_impact    → % mejora estimada
+    • user_seeks         → Veces que se beneficiaría
+
+    ⚠ CUIDADO CON MISSING INDEXES:
+    ✗ Son SUGERENCIAS, no mandatos
+    ✗ No consideran impacto en escrituras
+    ✗ Pueden sugerir redundantes
+    ✗ Se resetean al reiniciar SQL Server
+
+
+================================================================================
+ 9. ESTRATEGIA DE MANTENIMIENTO
+================================================================================
+
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │                      PLAN DE MANTENIMIENTO                              │
+    ├─────────────────────────────────────────────────────────────────────────┤
+    │                                                                         │
+    │ DIARIO (fuera de horario pico):                                        │
+    │ • Actualizar estadísticas de tablas críticas                           │
+    │ • REORGANIZE índices con 5-10% fragmentación (opcional)                │
+    │                                                                         │
+    │ SEMANAL:                                                                │
+    │ • Analizar fragmentación completa                                      │
+    │ • REBUILD índices con >30% fragmentación                               │
+    │ • REORGANIZE índices con 10-30%                                        │
+    │                                                                         │
+    │ MENSUAL:                                                                │
+    │ • Revisar índices no usados                                            │
+    │ • Evaluar missing indexes                                              │
+    │ • Ajustar Fill Factor según patrones                                   │
+    └─────────────────────────────────────────────────────────────────────────┘
+
+
+================================================================================
+ 10. SCRIPTS RÁPIDOS
+================================================================================
+
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │ -- Ver fragmentación de todos los índices                              │
+    │ SELECT OBJECT_NAME(ps.object_id) AS Tabla, i.name,                     │
+    │        ps.avg_fragmentation_in_percent AS Frag, ps.page_count          │
+    │ FROM sys.dm_db_index_physical_stats(DB_ID(), NULL, NULL, NULL, 'LIMITED') ps│
+    │ JOIN sys.indexes i ON ps.object_id = i.object_id AND ps.index_id = i.index_id│
+    │ WHERE ps.page_count > 100 ORDER BY Frag DESC;                          │
+    └─────────────────────────────────────────────────────────────────────────┘
+
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │ -- Ver Fill Factor actual                                              │
+    │ SELECT OBJECT_NAME(object_id) AS Tabla, name AS Indice,                │
+    │        CASE fill_factor WHEN 0 THEN 100 ELSE fill_factor END AS FF     │
+    │ FROM sys.indexes WHERE type > 0;                                       │
+    └─────────────────────────────────────────────────────────────────────────┘
+
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │ -- Actualizar todas las estadísticas                                   │
+    │ EXEC sp_updatestats;                                                   │
+    └─────────────────────────────────────────────────────────────────────────┘
+
+
+================================================================================
+ 11. REGLAS DE ORO
+================================================================================
+
+    ✓ Monitorear fragmentación regularmente (semanal mínimo)
+    
+    ✓ REBUILD solo cuando fragmentación > 30%
+    
+    ✓ Usar ONLINE = ON en producción (Enterprise)
+    
+    ✓ Ajustar Fill Factor según patrón de escritura
+    
+    ✓ Eliminar índices que no se usan
+    
+    ✓ No crear todos los índices que sugiere SQL Server
+    
+    ✓ Programar mantenimiento en horas de bajo uso
+    
+    ✓ Actualizar estadísticas después de REORGANIZE
+
+
+================================================================================
+ 12. ERRORES COMUNES
+================================================================================
+
+    ✗ Hacer REBUILD diario (innecesario, costoso)
+    
+    ✗ Fill Factor 100% en tablas con muchos INSERTs aleatorios
+    
+    ✗ Crear todos los missing indexes sin evaluar
+    
+    ✗ Ignorar índices duplicados
+    
+    ✗ No monitorear uso real de índices
+    
+    ✗ REBUILD sin ONLINE en horario productivo
+    
+    ✗ No tener estrategia de mantenimiento documentada
+
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  RECUERDA: La optimización de índices es un proceso continuo, no un evento  ║
+║  único. Monitorea, ajusta, repite.                                           ║
+╚══════════════════════════════════════════════════════════════════════════════╝

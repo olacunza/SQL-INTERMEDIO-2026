@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sesión 8 - Execution Plans II - Query Hints</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #1a1a2e;
+            color: #eee;
+            line-height: 1.6;
+        }
+        h1, h2, h3 {
+            color: #00d4ff;
+        }
+        h1 {
+            text-align: center;
+            border-bottom: 3px solid #00d4ff;
+            padding-bottom: 15px;
+        }
+        .section {
+            background: #16213e;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            border-left: 4px solid #00d4ff;
+        }
+        .warning {
+            background: #3d1f1f;
+            border-left: 4px solid #ff4757;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .tip {
+            background: #1f3d1f;
+            border-left: 4px solid #2ed573;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .bancario {
+            background: #3d3d1f;
+            border-left: 4px solid #ffa502;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        code {
+            background: #0d0d0d;
+            padding: 2px 8px;
+            border-radius: 4px;
+            color: #2ed573;
+            font-family: 'Consolas', monospace;
+        }
+        pre {
+            background: #0d0d0d;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            color: #2ed573;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border: 1px solid #444;
+        }
+        th {
+            background: #00d4ff;
+            color: #1a1a2e;
+        }
+        tr:nth-child(even) {
+            background: #0f3460;
+        }
+        .agenda {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+        .agenda-item {
+            background: #0f3460;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .agenda-item span {
+            display: block;
+            color: #00d4ff;
+            font-size: 0.9em;
+        }
+        .diagram {
+            background: #0d0d0d;
+            padding: 20px;
+            border-radius: 10px;
+            font-family: 'Consolas', monospace;
+            white-space: pre;
+            overflow-x: auto;
+            color: #00d4ff;
+            text-align: center;
+        }
+        .good { color: #2ed573; }
+        .bad { color: #ff4757; }
+        .neutral { color: #ffa502; }
+        .hint-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 15px;
+            margin: 15px 0;
+        }
+        .hint-card {
+            background: #0f3460;
+            padding: 15px;
+            border-radius: 8px;
+            border: 2px solid #444;
+        }
+        .hint-card h4 {
+            margin: 0 0 10px 0;
+            color: #00d4ff;
+        }
+        .hint-card code {
+            display: block;
+            margin-top: 10px;
+            padding: 8px;
+        }
+        .comparison {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .comparison-item {
+            background: #0f3460;
+            padding: 15px;
+            border-radius: 8px;
+        }
+        .flow-diagram {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            flex-wrap: wrap;
+            padding: 20px;
+            background: #0d0d0d;
+            border-radius: 10px;
+            margin: 15px 0;
+        }
+        .flow-step {
+            text-align: center;
+            padding: 15px;
+            min-width: 150px;
+        }
+        .flow-step .number {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            line-height: 40px;
+            border-radius: 50%;
+            background: #00d4ff;
+            color: #1a1a2e;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .flow-arrow {
+            font-size: 2em;
+            color: #00d4ff;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎯 Sesión 8: Execution Plans II</h1>
+    <p style="text-align: center; color: #888;">Semana 4 | SQL Server Intermedio | Query Hints y Optimización Avanzada</p>
+
+    <div class="section">
+        <h2>📋 Agenda de la Sesión</h2>
+        <div class="agenda">
+            <div class="agenda-item">
+                <strong>Parte 1-3</strong>
+                <span>15 min</span>
+                JOIN y TABLE Hints
+            </div>
+            <div class="agenda-item">
+                <strong>Parte 4-6</strong>
+                <span>15 min</span>
+                OPTION + Parameter Sniffing
+            </div>
+            <div class="agenda-item">
+                <strong>Parte 7-8</strong>
+                <span>15 min</span>
+                Query Store y Plan Guides
+            </div>
+            <div class="agenda-item">
+                <strong>Parte 9-11</strong>
+                <span>15 min</span>
+                FORCESEEK, MAXDOP, Caso Práctico
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>🎯 Objetivos de Aprendizaje</h2>
+        <ul>
+            <li>Entender los diferentes tipos de <strong>Query Hints</strong></li>
+            <li>Aplicar <strong>JOIN Hints</strong>: LOOP, HASH, MERGE</li>
+            <li>Usar <strong>TABLE Hints</strong>: NOLOCK, INDEX, FORCESEEK</li>
+            <li>Dominar <strong>OPTION</strong>: RECOMPILE, OPTIMIZE FOR, MAXDOP</li>
+            <li>Diagnosticar y resolver <strong>Parameter Sniffing</strong></li>
+            <li>Utilizar <strong>Query Store</strong> para plan forcing</li>
+            <li>Crear <strong>Plan Guides</strong> sin modificar código</li>
+        </ul>
+    </div>
+
+    <div class="warning">
+        <h3>⚠️ Regla de Oro sobre Hints</h3>
+        <p><strong>Los hints ANULAN la inteligencia del Query Optimizer.</strong></p>
+        <p>Usar hints es el <strong>ÚLTIMO RECURSO</strong>. Primero intentar:</p>
+        <ol>
+            <li>Crear/mejorar índices</li>
+            <li>Reescribir la consulta</li>
+            <li>Actualizar estadísticas</li>
+            <li><strong>Solo entonces:</strong> considerar hints</li>
+        </ol>
+    </div>
+
+    <div class="section">
+        <h2>🔗 JOIN Hints</h2>
+        
+        <p>Fuerzan el tipo de JOIN físico que usará SQL Server:</p>
+
+        <div class="hint-grid">
+            <div class="hint-card">
+                <h4>LOOP JOIN</h4>
+                <p>Nested Loops: Outer pequeño + índice en inner</p>
+                <code>INNER LOOP JOIN</code>
+            </div>
+            <div class="hint-card">
+                <h4>HASH JOIN</h4>
+                <p>Build hash table: Sin índices, tablas grandes</p>
+                <code>INNER HASH JOIN</code>
+            </div>
+            <div class="hint-card">
+                <h4>MERGE JOIN</h4>
+                <p>Merge sorted: Ambos lados ordenados</p>
+                <code>INNER MERGE JOIN</code>
+            </div>
+        </div>
+
+        <pre>
+-- Ejemplo: Forzar LOOP JOIN
+SELECT c.Nombre, cu.NumeroCuenta
+FROM CLIENTES c
+INNER LOOP JOIN CUENTAS cu ON c.ClienteID = cu.ClienteID
+WHERE c.ClienteID BETWEEN 1 AND 100;</pre>
+    </div>
+
+    <div class="section">
+        <h2>📋 TABLE Hints</h2>
+        
+        <table>
+            <tr>
+                <th>Hint</th>
+                <th>Efecto</th>
+                <th>Riesgo</th>
+            </tr>
+            <tr>
+                <td><code>NOLOCK</code></td>
+                <td>Lee sin locks (dirty reads)</td>
+                <td class="bad">🔴 Datos incorrectos</td>
+            </tr>
+            <tr>
+                <td><code>READPAST</code></td>
+                <td>Salta filas bloqueadas</td>
+                <td class="neutral">🟡 Omite filas</td>
+            </tr>
+            <tr>
+                <td><code>UPDLOCK</code></td>
+                <td>Lock de actualización al leer</td>
+                <td class="neutral">🟡 Más bloqueos</td>
+            </tr>
+            <tr>
+                <td><code>INDEX(nombre)</code></td>
+                <td>Fuerza índice específico</td>
+                <td class="neutral">🟡 Plan subóptimo</td>
+            </tr>
+            <tr>
+                <td><code>FORCESEEK</code></td>
+                <td>Fuerza Index Seek</td>
+                <td class="neutral">🟡 Plan subóptimo</td>
+            </tr>
+            <tr>
+                <td><code>FORCESCAN</code></td>
+                <td>Fuerza Index Scan</td>
+                <td class="neutral">🟡 Plan subóptimo</td>
+            </tr>
+        </table>
+
+        <pre>
+-- Sintaxis
+SELECT * FROM Tabla WITH (hint1, hint2) WHERE condicion;
+
+-- Ejemplos
+SELECT * FROM CUENTAS WITH (NOLOCK) WHERE TipoCuenta = 'Ahorro';
+SELECT * FROM TX WITH (INDEX(IX_TX_Fecha)) WHERE Fecha > '2024-01-01';</pre>
+    </div>
+
+    <div class="warning">
+        <h3>⚠️ NOLOCK: Riesgos Reales</h3>
+        <p>NOLOCK permite lecturas "sucias". Puede causar:</p>
+        <ul>
+            <li><strong>Dirty Reads:</strong> Leer datos que luego se revierten</li>
+            <li><strong>Filas Duplicadas:</strong> Por page splits durante lectura</li>
+            <li><strong>Filas Faltantes:</strong> Por reacomodos de páginas</li>
+            <li><strong>Datos Parciales:</strong> Leer fila mientras se actualiza</li>
+        </ul>
+        <p><span class="bad">❌ NUNCA usar para:</span> Saldos, auditoría, inventario crítico</p>
+        <p><span class="good">✅ Aceptable para:</span> Reportes aproximados, dashboards de tendencias</p>
+    </div>
+
+    <div class="section">
+        <h2>⚙️ OPTION Clause</h2>
+        
+        <p>Se coloca al <strong>FINAL</strong> de la consulta y afecta toda la ejecución:</p>
+
+        <div class="hint-grid">
+            <div class="hint-card">
+                <h4>RECOMPILE</h4>
+                <p>Genera nuevo plan en cada ejecución</p>
+                <code>OPTION (RECOMPILE)</code>
+            </div>
+            <div class="hint-card">
+                <h4>OPTIMIZE FOR</h4>
+                <p>Optimiza para valor específico</p>
+                <code>OPTION (OPTIMIZE FOR (@var = 500))</code>
+            </div>
+            <div class="hint-card">
+                <h4>OPTIMIZE FOR UNKNOWN</h4>
+                <p>Usa distribución promedio</p>
+                <code>OPTION (OPTIMIZE FOR UNKNOWN)</code>
+            </div>
+            <div class="hint-card">
+                <h4>MAXDOP</h4>
+                <p>Limita CPUs (1=serial)</p>
+                <code>OPTION (MAXDOP 1)</code>
+            </div>
+            <div class="hint-card">
+                <h4>FORCE ORDER</h4>
+                <p>JOINs en orden escrito</p>
+                <code>OPTION (FORCE ORDER)</code>
+            </div>
+            <div class="hint-card">
+                <h4>USE PLAN</h4>
+                <p>Usa plan XML específico</p>
+                <code>OPTION (USE PLAN 'xml...')</code>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>🐛 Parameter Sniffing</h2>
+        
+        <div class="diagram">
+                        EL PROBLEMA DEL PARAMETER SNIFFING
+
+    Primera ejecución:                    Ejecuciones posteriores:
+    ══════════════════                    ════════════════════════
+
+    EXEC sp_Buscar @ID = 1               EXEC sp_Buscar @ID = 999999
+           │                                      │
+           ▼                                      │
+    ┌─────────────────┐                          │
+    │ Compila plan    │                          │
+    │ optimizado para │                          │
+    │ @ID = 1         │◄─────────────────────────┘
+    │ (pocas filas)   │    USA EL MISMO PLAN!
+    └─────────────────┘    (puede ser TERRIBLE)
+        </div>
+
+        <h3>Síntomas:</h3>
+        <ul>
+            <li>SP rápido a veces, lento otras (con mismos parámetros)</li>
+            <li>DBCC FREEPROCCACHE "arregla" temporalmente</li>
+            <li>Rendimiento errático e impredecible</li>
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>💊 Soluciones para Parameter Sniffing</h2>
+
+        <table>
+            <tr>
+                <th>Solución</th>
+                <th>Ventaja</th>
+                <th>Desventaja</th>
+            </tr>
+            <tr>
+                <td><code>OPTION (RECOMPILE)</code></td>
+                <td class="good">Plan siempre óptimo</td>
+                <td class="bad">CPU extra cada ejecución</td>
+            </tr>
+            <tr>
+                <td><code>OPTIMIZE FOR (@var = x)</code></td>
+                <td class="good">Un solo compile</td>
+                <td class="neutral">Elegir valor "típico"</td>
+            </tr>
+            <tr>
+                <td><code>OPTIMIZE FOR UNKNOWN</code></td>
+                <td class="good">Usa promedios</td>
+                <td class="neutral">No siempre óptimo</td>
+            </tr>
+            <tr>
+                <td>Variables locales</td>
+                <td class="good">Simple</td>
+                <td class="bad">Puede empeorar estimados</td>
+            </tr>
+            <tr>
+                <td>Query Store Force</td>
+                <td class="good">Sin cambiar código</td>
+                <td class="neutral">Mantenimiento</td>
+            </tr>
+        </table>
+
+        <pre>
+-- Solución 1: RECOMPILE
+SELECT * FROM TX WHERE Tipo = @Tipo OPTION (RECOMPILE);
+
+-- Solución 2: OPTIMIZE FOR valor típico
+SELECT * FROM TX WHERE Tipo = @Tipo OPTION (OPTIMIZE FOR (@Tipo = 'Normal'));
+
+-- Solución 3: Variables locales (menos recomendado)
+DECLARE @LocalTipo VARCHAR(20) = @Tipo;
+SELECT * FROM TX WHERE Tipo = @LocalTipo;</pre>
+    </div>
+
+    <div class="section">
+        <h2>📊 Query Store</h2>
+        
+        <p>Sistema integrado (SQL 2016+) para monitorear y estabilizar planes:</p>
+
+        <div class="flow-diagram">
+            <div class="flow-step">
+                <div class="number">1</div>
+                <p>Captura consultas y planes automáticamente</p>
+            </div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step">
+                <div class="number">2</div>
+                <p>Almacena métricas de rendimiento</p>
+            </div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step">
+                <div class="number">3</div>
+                <p>Permite forzar planes específicos</p>
+            </div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step">
+                <div class="number">4</div>
+                <p>Detecta regresiones</p>
+            </div>
+        </div>
+
+        <pre>
+-- Habilitar Query Store
+ALTER DATABASE BancoDB SET QUERY_STORE = ON;
+
+-- Forzar un plan específico  
+EXEC sp_query_store_force_plan @query_id = 1, @plan_id = 2;
+
+-- Quitar forcing
+EXEC sp_query_store_unforce_plan @query_id = 1, @plan_id = 2;</pre>
+
+        <div class="tip">
+            <strong>💡 Consejo:</strong> Query Store es la forma más limpia de estabilizar planes sin modificar código. Ideal para aplicaciones legacy o cuando no tienes acceso al código fuente.
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>📝 Plan Guides</h2>
+        
+        <p>Aplican hints <strong>sin modificar el código fuente</strong>:</p>
+
+        <pre>
+-- Crear Plan Guide para un SP
+EXEC sp_create_plan_guide
+    @name = N'PG_MiSP',
+    @stmt = N'SELECT ... consulta exacta ...',
+    @type = N'OBJECT',
+    @module_or_batch = N'dbo.MiStoredProcedure',
+    @params = NULL,
+    @hints = N'OPTION (RECOMPILE)';
+
+-- Ver Plan Guides
+SELECT * FROM sys.plan_guides;
+
+-- Eliminar
+EXEC sp_control_plan_guide @operation = N'DROP', @name = N'PG_MiSP';</pre>
+    </div>
+
+    <div class="section">
+        <h2>⚡ MAXDOP - Control de Paralelismo</h2>
+
+        <div class="comparison">
+            <div class="comparison-item">
+                <h4>MAXDOP 1 (Serial)</h4>
+                <ul>
+                    <li>Consultas OLTP pequeñas</li>
+                    <li>Alta concurrencia</li>
+                    <li>Evita overhead de paralelismo</li>
+                </ul>
+            </div>
+            <div class="comparison-item">
+                <h4>MAXDOP > 1 (Paralelo)</h4>
+                <ul>
+                    <li>Consultas analíticas grandes</li>
+                    <li>Procesamiento batch</li>
+                    <li>Reportes pesados</li>
+                </ul>
+            </div>
+        </div>
+
+        <pre>
+-- OLTP: Sin paralelismo
+SELECT * FROM Ordenes WHERE ID = @ID OPTION (MAXDOP 1);
+
+-- Reporte: Paralelismo completo
+SELECT Region, SUM(Total) FROM Ventas GROUP BY Region OPTION (MAXDOP 0);</pre>
+    </div>
+
+    <div class="bancario">
+        <h3>🏦 Caso Práctico: Estabilizando el Core Bancario</h3>
+        <p><strong>Escenario:</strong> El SP de "Consulta de Movimientos" es crítico pero inestable. A veces 50ms, otras 15 segundos.</p>
+        
+        <p><strong>Diagnóstico:</strong></p>
+        <ul>
+            <li>Parameter sniffing: Clientes pequeños vs grandes</li>
+            <li>Plan variable según primer parámetro compilado</li>
+        </ul>
+        
+        <p><strong>Solución implementada:</strong></p>
+        <ol>
+            <li>Habilitar Query Store para monitorear</li>
+            <li>Identificar el mejor plan (menor avg_duration)</li>
+            <li>Forzar ese plan con sp_query_store_force_plan</li>
+            <li>Alternativa: OPTION (RECOMPILE) para casos extremos</li>
+        </ol>
+        
+        <p><strong>Resultado:</strong> Rendimiento estable: 80-120ms consistente</p>
+    </div>
+
+    <div class="section">
+        <h2>✅ Resumen de la Sesión</h2>
+        
+        <table>
+            <tr>
+                <th>Concepto</th>
+                <th>Uso Principal</th>
+            </tr>
+            <tr>
+                <td>JOIN Hints</td>
+                <td>Forzar LOOP, HASH, MERGE JOIN</td>
+            </tr>
+            <tr>
+                <td>TABLE Hints</td>
+                <td>NOLOCK, INDEX, FORCESEEK en tablas específicas</td>
+            </tr>
+            <tr>
+                <td>OPTION (RECOMPILE)</td>
+                <td>Resolver parameter sniffing extremo</td>
+            </tr>
+            <tr>
+                <td>OPTION (OPTIMIZE FOR)</td>
+                <td>Optimizar para valor típico conocido</td>
+            </tr>
+            <tr>
+                <td>MAXDOP</td>
+                <td>Controlar paralelismo (OLTP vs reportes)</td>
+            </tr>
+            <tr>
+                <td>Query Store</td>
+                <td>Monitorear y forzar planes sin código</td>
+            </tr>
+            <tr>
+                <td>Plan Guides</td>
+                <td>Agregar hints sin acceso al código</td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="section">
+        <h2>📁 Archivos de la Sesión</h2>
+        <ul>
+            <li><code>1. Execution_Plans_II.sql</code> - Script principal con teoría y demos</li>
+            <li><code>2. Ejercicios_Plans_II.sql</code> - Ejercicios prácticos</li>
+            <li><code>CheatSheet_Plans_II.txt</code> - Referencia rápida de hints</li>
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>➡️ Próxima Sesión (Sesión 9)</h2>
+        <h3>Optimización de Índices</h3>
+        <ul>
+            <li>Fragmentación: causas e impacto</li>
+            <li>REBUILD vs REORGANIZE</li>
+            <li>Fill Factor y PAD_INDEX</li>
+            <li>Mantenimiento automatizado de índices</li>
+        </ul>
+    </div>
+
+    <footer style="text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #444; color: #888;">
+        <p>SQL Server Intermedio 2026 | Sesión 8 de 16</p>
+        <p>Semana 4 - Execution Plans II (Query Hints y Optimización Avanzada)</p>
+    </footer>
+</body>
+</html>
