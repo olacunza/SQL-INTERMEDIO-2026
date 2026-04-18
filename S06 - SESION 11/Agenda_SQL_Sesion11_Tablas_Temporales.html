@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sesión 11: Tablas Temporales y Variables - SQL Intermedio 2026</title>
+    <style>
+        :root {
+            --primary: #0891b2;
+            --primary-dark: #0e7490;
+            --secondary: #06b6d4;
+            --accent: #f59e0b;
+            --bg: linear-gradient(135deg, #164e63 0%, #155e75 50%, #0e7490 100%);
+            --card-bg: rgba(255, 255, 255, 0.95);
+            --text: #1e293b;
+            --text-light: #64748b;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            min-height: 100vh;
+            padding: 2rem;
+            color: var(--text);
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        header {
+            background: var(--card-bg);
+            border-radius: 20px;
+            padding: 2rem 3rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+        
+        .session-badge {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            padding: 0.5rem 1.5rem;
+            border-radius: 50px;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        
+        h1 {
+            font-size: 2.2rem;
+            color: var(--primary-dark);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        h1::before {
+            content: "📊";
+            font-size: 2rem;
+        }
+        
+        .meta-info {
+            display: flex;
+            gap: 2rem;
+            color: var(--text-light);
+            font-size: 0.95rem;
+        }
+        
+        .meta-info span {
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+        }
+        
+        .main-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 2rem;
+        }
+        
+        .card {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 1.8rem;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+        }
+        
+        .card h2 {
+            color: var(--primary-dark);
+            margin-bottom: 1.2rem;
+            padding-bottom: 0.8rem;
+            border-bottom: 2px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .agenda-timeline {
+            position: relative;
+            padding-left: 2rem;
+        }
+        
+        .agenda-timeline::before {
+            content: '';
+            position: absolute;
+            left: 6px;
+            top: 0;
+            bottom: 0;
+            width: 3px;
+            background: linear-gradient(to bottom, var(--primary), var(--secondary));
+            border-radius: 3px;
+        }
+        
+        .agenda-item {
+            position: relative;
+            padding: 1rem 0;
+            padding-left: 1rem;
+        }
+        
+        .agenda-item::before {
+            content: '';
+            position: absolute;
+            left: -24px;
+            top: 1.3rem;
+            width: 14px;
+            height: 14px;
+            background: var(--primary);
+            border-radius: 50%;
+            border: 3px solid white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+        
+        .agenda-item.break::before {
+            background: var(--accent);
+        }
+        
+        .agenda-time {
+            font-size: 0.85rem;
+            color: var(--primary);
+            font-weight: 600;
+            display: block;
+            margin-bottom: 0.3rem;
+        }
+        
+        .agenda-title {
+            font-weight: 600;
+            color: var(--text);
+            font-size: 1.05rem;
+        }
+        
+        .agenda-desc {
+            font-size: 0.9rem;
+            color: var(--text-light);
+            margin-top: 0.3rem;
+        }
+        
+        .objectives-list {
+            list-style: none;
+        }
+        
+        .objectives-list li {
+            padding: 0.7rem 0;
+            padding-left: 2rem;
+            position: relative;
+            border-bottom: 1px dashed #e2e8f0;
+        }
+        
+        .objectives-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .objectives-list li::before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: var(--primary);
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+        
+        .type-cards {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        
+        .type-card {
+            background: linear-gradient(135deg, #f0fdfa, #e0fcfc);
+            border-radius: 12px;
+            padding: 1.2rem;
+            text-align: center;
+            border-top: 4px solid var(--primary);
+            transition: transform 0.2s;
+        }
+        
+        .type-card:hover {
+            transform: translateY(-3px);
+        }
+        
+        .type-card .icon {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .type-card h4 {
+            color: var(--primary-dark);
+            font-size: 1rem;
+            margin-bottom: 0.3rem;
+        }
+        
+        .type-card p {
+            font-size: 0.8rem;
+            color: var(--text-light);
+        }
+        
+        .comparison-table {
+            width: 100%;
+            margin-top: 1rem;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+        
+        .comparison-table th {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            padding: 0.8rem;
+            text-align: left;
+        }
+        
+        .comparison-table td {
+            padding: 0.7rem;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .comparison-table tr:nth-child(even) {
+            background: #f8fafc;
+        }
+        
+        .code-box {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 1rem;
+            border-radius: 8px;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 0.8rem;
+            overflow-x: auto;
+            margin-top: 1rem;
+        }
+        
+        .code-box .keyword {
+            color: #22d3ee;
+        }
+        
+        .code-box .type {
+            color: #a78bfa;
+        }
+        
+        .code-box .comment {
+            color: #6b7280;
+        }
+        
+        .resources-list {
+            list-style: none;
+        }
+        
+        .resources-list li {
+            padding: 0.8rem;
+            margin: 0.5rem 0;
+            background: #f8fafc;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            transition: transform 0.2s;
+        }
+        
+        .resources-list li:hover {
+            transform: translateX(5px);
+        }
+        
+        .resources-list .icon {
+            width: 36px;
+            height: 36px;
+            background: var(--primary);
+            color: white;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+        }
+        
+        .scope-diagram {
+            margin: 1.5rem 0;
+            padding: 1rem;
+            background: linear-gradient(135deg, #ecfeff, #e0f7fa);
+            border-radius: 12px;
+        }
+        
+        .scope-row {
+            display: flex;
+            align-items: center;
+            padding: 0.5rem;
+            margin: 0.3rem 0;
+        }
+        
+        .scope-label {
+            width: 100px;
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: var(--primary-dark);
+        }
+        
+        .scope-bar {
+            flex: 1;
+            height: 24px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            padding-left: 1rem;
+            color: white;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        
+        .scope-temp { background: linear-gradient(90deg, var(--primary), var(--secondary)); width: 70%; }
+        .scope-global { background: linear-gradient(90deg, #f59e0b, #d97706); width: 100%; }
+        .scope-var { background: linear-gradient(90deg, #8b5cf6, #7c3aed); width: 40%; }
+        
+        .warning-box {
+            background: linear-gradient(135deg, #fef3c7, #fde68a);
+            border-left: 4px solid var(--accent);
+            padding: 1rem;
+            border-radius: 8px;
+            margin-top: 1rem;
+        }
+        
+        .warning-box h4 {
+            color: #92400e;
+            margin-bottom: 0.5rem;
+        }
+        
+        .warning-box ul {
+            list-style: none;
+            font-size: 0.85rem;
+            color: #78350f;
+        }
+        
+        .warning-box li {
+            padding: 0.3rem 0;
+        }
+        
+        footer {
+            margin-top: 2rem;
+            text-align: center;
+            color: white;
+            opacity: 0.8;
+            font-size: 0.9rem;
+        }
+        
+        @media (max-width: 900px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            header {
+                flex-direction: column;
+                text-align: center;
+            }
+            
+            .type-cards {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div>
+                <span class="session-badge">SEMANA 6 • SESIÓN 11</span>
+                <h1>Tablas Temporales y Variables</h1>
+                <p style="color: var(--text-light); margin-top: 0.5rem;">
+                    #temp, @variable, ##temp, TVP, Scope y Performance
+                </p>
+            </div>
+            <div class="meta-info">
+                <span>📅 Semana 6</span>
+                <span>⏱️ 2 horas</span>
+                <span>📊 Nivel: Intermedio</span>
+            </div>
+        </header>
+        
+        <div class="main-grid">
+            <div class="left-column">
+                <div class="card">
+                    <h2>📋 Agenda de la Sesión</h2>
+                    <div class="agenda-timeline">
+                        <div class="agenda-item">
+                            <span class="agenda-time">0:00 - 0:10</span>
+                            <div class="agenda-title">¿Por qué almacenamiento temporal?</div>
+                            <div class="agenda-desc">Resultados intermedios, staging, performance, división de queries complejos.</div>
+                        </div>
+                        
+                        <div class="agenda-item">
+                            <span class="agenda-time">0:10 - 0:30</span>
+                            <div class="agenda-title">Tablas Temporales Locales (#temp)</div>
+                            <div class="agenda-desc">CREATE TABLE vs SELECT INTO. Índices post-carga. Scope en SPs anidados.</div>
+                        </div>
+                        
+                        <div class="agenda-item">
+                            <span class="agenda-time">0:30 - 0:40</span>
+                            <div class="agenda-title">Tablas Temporales Globales (##temp)</div>
+                            <div class="agenda-desc">Visibilidad cross-session. Casos de uso y precauciones.</div>
+                        </div>
+                        
+                        <div class="agenda-item">
+                            <span class="agenda-time">0:40 - 0:55</span>
+                            <div class="agenda-title">Variables de Tabla (@table)</div>
+                            <div class="agenda-desc">Declaración, índices, restricciones. Comportamiento con ROLLBACK.</div>
+                        </div>
+                        
+                        <div class="agenda-item break">
+                            <span class="agenda-time">0:55 - 1:05</span>
+                            <div class="agenda-title">☕ Receso</div>
+                        </div>
+                        
+                        <div class="agenda-item">
+                            <span class="agenda-time">1:05 - 1:20</span>
+                            <div class="agenda-title">Scope y Ciclo de Vida</div>
+                            <div class="agenda-desc">Visibilidad en SPs hijos. Creación dentro vs fuera de procedimientos.</div>
+                        </div>
+                        
+                        <div class="agenda-item">
+                            <span class="agenda-time">1:20 - 1:35</span>
+                            <div class="agenda-title">Estadísticas y Cardinalidad</div>
+                            <div class="agenda-desc">Por qué #temp es mejor para JOINs. Deferred Compilation en 2019+.</div>
+                        </div>
+                        
+                        <div class="agenda-item">
+                            <span class="agenda-time">1:35 - 1:50</span>
+                            <div class="agenda-title">Table-Valued Parameters (TVP)</div>
+                            <div class="agenda-desc">CREATE TYPE, READONLY, pasar listas de valores a SPs.</div>
+                        </div>
+                        
+                        <div class="agenda-item">
+                            <span class="agenda-time">1:50 - 2:00</span>
+                            <div class="agenda-title">Casos Prácticos BancoDB</div>
+                            <div class="agenda-desc">Reporte multi-paso, ETL staging, log inmune a rollback.</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card" style="margin-top: 2rem;">
+                    <h2>📊 Tipos de Almacenamiento Temporal</h2>
+                    <div class="type-cards">
+                        <div class="type-card">
+                            <div class="icon">#️⃣</div>
+                            <h4>#temp</h4>
+                            <p>Local a sesión<br>Estadísticas<br>Índices completos</p>
+                        </div>
+                        <div class="type-card">
+                            <div class="icon">🌐</div>
+                            <h4>##temp</h4>
+                            <p>Global<br>Cross-session<br>Visibilidad total</p>
+                        </div>
+                        <div class="type-card">
+                            <div class="icon">@</div>
+                            <h4>@variable</h4>
+                            <p>Solo en batch<br>No rollback<br>Pequeños datasets</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card" style="margin-top: 2rem;">
+                    <h2>👁️ Diagrama de Scope</h2>
+                    <div class="scope-diagram">
+                        <div class="scope-row">
+                            <span class="scope-label">##temp</span>
+                            <div class="scope-bar scope-global">Todas las sesiones</div>
+                        </div>
+                        <div class="scope-row">
+                            <span class="scope-label">#temp</span>
+                            <div class="scope-bar scope-temp">Sesión + SPs hijos</div>
+                        </div>
+                        <div class="scope-row">
+                            <span class="scope-label">@variable</span>
+                            <div class="scope-bar scope-var">Solo batch actual</div>
+                        </div>
+                    </div>
+                    
+                    <div class="code-box">
+                        <span class="comment">-- Crear en sesión, visible en SP hijo</span><br>
+                        <span class="keyword">CREATE TABLE</span> <span class="type">#MiTemp</span> (ID INT);<br><br>
+                        <span class="keyword">EXEC</span> sp_MiProcedimiento; <span class="comment">-- Puede acceder a #MiTemp</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="right-column">
+                <div class="card">
+                    <h2>🎯 Objetivos</h2>
+                    <ul class="objectives-list">
+                        <li>Entender cuándo usar cada tipo de almacenamiento temporal</li>
+                        <li>Dominar scope y ciclo de vida de #temp vs @variable</li>
+                        <li>Crear índices eficientes en tablas temporales</li>
+                        <li>Comprender el impacto en planes de ejecución</li>
+                        <li>Implementar TVP para pasar conjuntos a SPs</li>
+                        <li>Aplicar mejores prácticas en escenarios reales</li>
+                    </ul>
+                </div>
+                
+                <div class="card" style="margin-top: 1.5rem;">
+                    <h2>⚖️ Guía de Selección</h2>
+                    <table class="comparison-table">
+                        <thead>
+                            <tr>
+                                <th>Escenario</th>
+                                <th>Usar</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>< 100 filas</td>
+                                <td>@variable</td>
+                            </tr>
+                            <tr>
+                                <td>> 10,000 filas</td>
+                                <td>#temp</td>
+                            </tr>
+                            <tr>
+                                <td>JOINs complejos</td>
+                                <td>#temp</td>
+                            </tr>
+                            <tr>
+                                <td>Log sin rollback</td>
+                                <td>@variable</td>
+                            </tr>
+                            <tr>
+                                <td>Compartir sesiones</td>
+                                <td>##temp</td>
+                            </tr>
+                            <tr>
+                                <td>Lista a SP</td>
+                                <td>TVP</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="card" style="margin-top: 1.5rem;">
+                    <h2>📁 Archivos de la Sesión</h2>
+                    <ul class="resources-list">
+                        <li>
+                            <span class="icon">📄</span>
+                            <div>
+                                <strong>1. Tablas_Temporales_Variables.sql</strong>
+                                <div style="font-size: 0.8rem; color: var(--text-light);">Script principal con teoría y demos</div>
+                            </div>
+                        </li>
+                        <li>
+                            <span class="icon">✏️</span>
+                            <div>
+                                <strong>2. Ejercicios_Tablas_Temporales.sql</strong>
+                                <div style="font-size: 0.8rem; color: var(--text-light);">10 ejercicios prácticos + soluciones</div>
+                            </div>
+                        </li>
+                        <li>
+                            <span class="icon">📋</span>
+                            <div>
+                                <strong>CheatSheet_Tablas_Temporales.txt</strong>
+                                <div style="font-size: 0.8rem; color: var(--text-light);">Referencia rápida comparativa</div>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="card" style="margin-top: 1.5rem;">
+                    <h2>⚠️ Puntos Clave</h2>
+                    <div class="warning-box">
+                        <h4>Recordar</h4>
+                        <ul>
+                            <li>• @variable NO hace rollback</li>
+                            <li>• @variable estima 1 fila (pre-2019)</li>
+                            <li>• Índices después de INSERT masivo</li>
+                            <li>• TVP requiere READONLY</li>
+                            <li>• ##temp visible globalmente</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="card" style="margin-top: 1.5rem;">
+                    <h2>📅 Próxima Sesión</h2>
+                    <div style="padding: 1rem; background: #f8fafc; border-radius: 10px; text-align: center;">
+                        <div style="font-size: 0.85rem; color: var(--text-light);">SEMANA 6 • SESIÓN 12</div>
+                        <div style="font-size: 1.2rem; font-weight: 600; color: var(--primary-dark); margin: 0.5rem 0;">
+                            🔄 Cursores vs Operaciones Set-Based
+                        </div>
+                        <div style="font-size: 0.85rem; color: var(--text-light);">
+                            WHILE loops, CURSOR tipos, Refactorización
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <footer>
+            <p>SQL Server Intermedio 2026 • Sesión 11 de 16 • Tablas Temporales y Variables</p>
+        </footer>
+    </div>
+</body>
+</html>

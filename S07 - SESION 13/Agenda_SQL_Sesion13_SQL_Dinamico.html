@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sesión 13: SQL Dinámico Seguro - SQL Intermedio 2026</title>
+    <style>
+        :root {
+            --primary: #7c3aed;
+            --primary-dark: #5b21b6;
+            --secondary: #06b6d4;
+            --danger: #ef4444;
+            --success: #10b981;
+            --bg: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4c1d95 100%);
+            --card-bg: rgba(255, 255, 255, 0.95);
+            --text: #1e293b;
+            --text-light: #64748b;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            min-height: 100vh;
+            padding: 2rem;
+            color: var(--text);
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        header {
+            background: var(--card-bg);
+            border-radius: 20px;
+            padding: 2rem 3rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+        
+        .session-badge {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            padding: 0.5rem 1.5rem;
+            border-radius: 50px;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        
+        h1 {
+            font-size: 2.2rem;
+            color: var(--primary-dark);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        h1::before {
+            content: "🔐";
+            font-size: 2rem;
+        }
+        
+        .meta-info {
+            display: flex;
+            gap: 2rem;
+            color: var(--text-light);
+            font-size: 0.95rem;
+        }
+        
+        .meta-info span {
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+        }
+        
+        .main-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 2rem;
+        }
+        
+        .card {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 1.8rem;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+        }
+        
+        .card h2 {
+            color: var(--primary-dark);
+            margin-bottom: 1.2rem;
+            padding-bottom: 0.8rem;
+            border-bottom: 2px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .agenda-timeline {
+            position: relative;
+            padding-left: 2rem;
+        }
+        
+        .agenda-timeline::before {
+            content: '';
+            position: absolute;
+            left: 6px;
+            top: 0;
+            bottom: 0;
+            width: 3px;
+            background: linear-gradient(to bottom, var(--primary), var(--secondary));
+            border-radius: 3px;
+        }
+        
+        .agenda-item {
+            position: relative;
+            padding: 1rem 0;
+            padding-left: 1rem;
+        }
+        
+        .agenda-item::before {
+            content: '';
+            position: absolute;
+            left: -24px;
+            top: 1.3rem;
+            width: 14px;
+            height: 14px;
+            background: var(--primary);
+            border-radius: 50%;
+            border: 3px solid white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+        
+        .agenda-item.break::before {
+            background: var(--secondary);
+        }
+        
+        .agenda-item.danger::before {
+            background: var(--danger);
+        }
+        
+        .agenda-time {
+            font-size: 0.85rem;
+            color: var(--primary);
+            font-weight: 600;
+            display: block;
+            margin-bottom: 0.3rem;
+        }
+        
+        .agenda-title {
+            font-weight: 600;
+            color: var(--text);
+            font-size: 1.05rem;
+        }
+        
+        .agenda-desc {
+            font-size: 0.9rem;
+            color: var(--text-light);
+            margin-top: 0.3rem;
+        }
+        
+        .objectives-list {
+            list-style: none;
+        }
+        
+        .objectives-list li {
+            padding: 0.7rem 0;
+            padding-left: 2rem;
+            position: relative;
+            border-bottom: 1px dashed #e2e8f0;
+        }
+        
+        .objectives-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .objectives-list li::before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: var(--primary);
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+        
+        .comparison-box {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        
+        .method-box {
+            padding: 1rem;
+            border-radius: 12px;
+            text-align: center;
+        }
+        
+        .method-box.bad {
+            background: linear-gradient(135deg, #fef2f2, #fee2e2);
+            border: 2px solid #fca5a5;
+        }
+        
+        .method-box.good {
+            background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+            border: 2px solid #86efac;
+        }
+        
+        .method-box h4 {
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .method-box.bad h4 { color: #b91c1c; }
+        .method-box.good h4 { color: #166534; }
+        
+        .method-box code {
+            display: block;
+            font-family: 'Consolas', monospace;
+            font-size: 0.75rem;
+            background: rgba(0,0,0,0.05);
+            padding: 0.5rem;
+            border-radius: 6px;
+            margin-top: 0.5rem;
+        }
+        
+        .code-box {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 1rem;
+            border-radius: 8px;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 0.75rem;
+            overflow-x: auto;
+            margin-top: 1rem;
+        }
+        
+        .code-box .keyword { color: #f87171; }
+        .code-box .function { color: #fbbf24; }
+        .code-box .comment { color: #6b7280; }
+        .code-box .string { color: #34d399; }
+        
+        .attack-table {
+            width: 100%;
+            margin-top: 1rem;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+        }
+        
+        .attack-table th {
+            background: linear-gradient(135deg, #ef4444, #b91c1c);
+            color: white;
+            padding: 0.7rem;
+            text-align: left;
+        }
+        
+        .attack-table td {
+            padding: 0.6rem;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .attack-table tr:nth-child(even) {
+            background: #fef2f2;
+        }
+        
+        .resources-list {
+            list-style: none;
+        }
+        
+        .resources-list li {
+            padding: 0.8rem;
+            margin: 0.5rem 0;
+            background: #f8fafc;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            transition: transform 0.2s;
+        }
+        
+        .resources-list li:hover {
+            transform: translateX(5px);
+        }
+        
+        .resources-list .icon {
+            width: 36px;
+            height: 36px;
+            background: var(--primary);
+            color: white;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+        }
+        
+        .security-box {
+            background: linear-gradient(135deg, #fef3c7, #fde68a);
+            border-left: 4px solid #f59e0b;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-top: 1rem;
+        }
+        
+        .security-box h4 {
+            color: #92400e;
+            margin-bottom: 0.5rem;
+        }
+        
+        .security-box ul {
+            list-style: none;
+            font-size: 0.85rem;
+            color: #78350f;
+        }
+        
+        .security-box li {
+            padding: 0.3rem 0;
+        }
+        
+        .function-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+        
+        .func-item {
+            background: #f1f5f9;
+            padding: 0.6rem;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            border-left: 3px solid var(--primary);
+        }
+        
+        .func-item code {
+            color: var(--primary-dark);
+            font-weight: 600;
+        }
+        
+        footer {
+            margin-top: 2rem;
+            text-align: center;
+            color: white;
+            opacity: 0.8;
+            font-size: 0.9rem;
+        }
+        
+        @media (max-width: 900px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            header {
+                flex-direction: column;
+                text-align: center;
+            }
+            
+            .comparison-box {
+                grid-template-columns: 1fr;
+            }
+            
+            .function-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div>
+                <span class="session-badge">SEMANA 7 • SESIÓN 13</span>
+                <h1>SQL Dinámico Seguro</h1>
+                <p style="color: var(--text-light); margin-top: 0.5rem;">
+                    sp_executesql, Prevención SQL Injection, QUOTENAME
+                </p>
+            </div>
+            <div class="meta-info">
+                <span>📅 Semana 7</span>
+                <span>⏱️ 2 horas</span>
+                <span>⚠️ Nivel: Avanzado</span>
+            </div>
+        </header>
+        
+        <div class="main-grid">
+            <div class="left-column">
+                <div class="card">
+                    <h2>📋 Agenda de la Sesión</h2>
+                    <div class="agenda-timeline">
+                        <div class="agenda-item">
+                            <span class="agenda-time">0:00 - 0:10</span>
+                            <div class="agenda-title">¿Qué es SQL Dinámico?</div>
+                            <div class="agenda-desc">Cuándo usarlo y cuándo evitarlo. Casos legítimos.</div>
+                        </div>
+                        
+                        <div class="agenda-item">
+                            <span class="agenda-time">0:10 - 0:25</span>
+                            <div class="agenda-title">EXEC (@sql) - El Método Básico</div>
+                            <div class="agenda-desc">Limitaciones, sin parámetros, vulnerabilidades.</div>
+                        </div>
+                        
+                        <div class="agenda-item">
+                            <span class="agenda-time">0:25 - 0:45</span>
+                            <div class="agenda-title">sp_executesql - El Método Seguro</div>
+                            <div class="agenda-desc">Parámetros, OUTPUT, reutilización de planes.</div>
+                        </div>
+                        
+                        <div class="agenda-item danger">
+                            <span class="agenda-time">0:45 - 1:00</span>
+                            <div class="agenda-title">⚠️ SQL Injection: Ataques y Demo</div>
+                            <div class="agenda-desc">Bypass login, stacked queries, UNION injection.</div>
+                        </div>
+                        
+                        <div class="agenda-item break">
+                            <span class="agenda-time">1:00 - 1:10</span>
+                            <div class="agenda-title">☕ Receso</div>
+                        </div>
+                        
+                        <div class="agenda-item">
+                            <span class="agenda-time">1:10 - 1:25</span>
+                            <div class="agenda-title">QUOTENAME y Validación</div>
+                            <div class="agenda-desc">Escapar identificadores. Validar contra catálogos.</div>
+                        </div>
+                        
+                        <div class="agenda-item">
+                            <span class="agenda-time">1:25 - 1:40</span>
+                            <div class="agenda-title">Búsquedas Dinámicas Seguras</div>
+                            <div class="agenda-desc">Filtros opcionales, ORDER BY con lista blanca.</div>
+                        </div>
+                        
+                        <div class="agenda-item">
+                            <span class="agenda-time">1:40 - 1:50</span>
+                            <div class="agenda-title">DDL Dinámico y Pivot</div>
+                            <div class="agenda-desc">CREATE dinámico, PIVOT con columnas variables.</div>
+                        </div>
+                        
+                        <div class="agenda-item">
+                            <span class="agenda-time">1:50 - 2:00</span>
+                            <div class="agenda-title">Debugging y Mejores Prácticas</div>
+                            <div class="agenda-desc">Modo debug, TRY...CATCH, logging de SQL.</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card" style="margin-top: 2rem;">
+                    <h2>⚔️ EXEC vs sp_executesql</h2>
+                    <div class="comparison-box">
+                        <div class="method-box bad">
+                            <h4>❌ EXEC (@sql)</h4>
+                            <p style="font-size: 0.8rem; color: #6b7280; margin: 0.5rem 0;">Sin parámetros, vulnerable</p>
+                            <code>'SELECT * FROM T WHERE X = ''' + @Val + ''''</code>
+                        </div>
+                        <div class="method-box good">
+                            <h4>✅ sp_executesql</h4>
+                            <p style="font-size: 0.8rem; color: #6b7280; margin: 0.5rem 0;">Parametrizado, seguro</p>
+                            <code>sp_executesql @sql, N'@V INT', @V = @Val</code>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card" style="margin-top: 2rem;">
+                    <h2>🛡️ SQL Injection - Tipos de Ataque</h2>
+                    <table class="attack-table">
+                        <thead>
+                            <tr>
+                                <th>Tipo</th>
+                                <th>Payload</th>
+                                <th>Efecto</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Bypass Auth</td>
+                                <td><code>' OR '1'='1</code></td>
+                                <td>Login sin password</td>
+                            </tr>
+                            <tr>
+                                <td>Comment</td>
+                                <td><code>admin'--</code></td>
+                                <td>Ignora condiciones</td>
+                            </tr>
+                            <tr>
+                                <td>Stacked</td>
+                                <td><code>'; DROP TABLE X;--</code></td>
+                                <td>Ejecuta DDL</td>
+                            </tr>
+                            <tr>
+                                <td>UNION</td>
+                                <td><code>' UNION SELECT...</code></td>
+                                <td>Extrae datos</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="right-column">
+                <div class="card">
+                    <h2>🎯 Objetivos</h2>
+                    <ul class="objectives-list">
+                        <li>Entender cuándo usar SQL dinámico</li>
+                        <li>Dominar sp_executesql con parámetros</li>
+                        <li>Conocer y prevenir SQL Injection</li>
+                        <li>Usar QUOTENAME para identificadores</li>
+                        <li>Validar objetos contra catálogos</li>
+                        <li>Implementar búsquedas seguras</li>
+                    </ul>
+                </div>
+                
+                <div class="card" style="margin-top: 1.5rem;">
+                    <h2>🔧 Funciones Clave</h2>
+                    <div class="function-grid">
+                        <div class="func-item">
+                            <code>sp_executesql</code><br>
+                            <span style="color: #64748b; font-size: 0.75rem;">Ejecución segura</span>
+                        </div>
+                        <div class="func-item">
+                            <code>QUOTENAME()</code><br>
+                            <span style="color: #64748b; font-size: 0.75rem;">Escapar nombres</span>
+                        </div>
+                        <div class="func-item">
+                            <code>OBJECT_ID()</code><br>
+                            <span style="color: #64748b; font-size: 0.75rem;">Verificar objetos</span>
+                        </div>
+                        <div class="func-item">
+                            <code>STRING_AGG()</code><br>
+                            <span style="color: #64748b; font-size: 0.75rem;">Pivot dinámico</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card" style="margin-top: 1.5rem;">
+                    <h2>📁 Archivos de la Sesión</h2>
+                    <ul class="resources-list">
+                        <li>
+                            <span class="icon">📄</span>
+                            <div>
+                                <strong>1. SQL_Dinamico_Seguro.sql</strong>
+                                <div style="font-size: 0.8rem; color: var(--text-light);">Script principal con teoría</div>
+                            </div>
+                        </li>
+                        <li>
+                            <span class="icon">✏️</span>
+                            <div>
+                                <strong>2. Ejercicios_SQL_Dinamico.sql</strong>
+                                <div style="font-size: 0.8rem; color: var(--text-light);">10 ejercicios prácticos</div>
+                            </div>
+                        </li>
+                        <li>
+                            <span class="icon">📋</span>
+                            <div>
+                                <strong>CheatSheet_SQL_Dinamico.txt</strong>
+                                <div style="font-size: 0.8rem; color: var(--text-light);">Sintaxis y patrones</div>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="card" style="margin-top: 1.5rem;">
+                    <h2>⚠️ Reglas de Oro</h2>
+                    <div class="security-box">
+                        <h4>Nunca Olvidar</h4>
+                        <ul>
+                            <li>• Valores → sp_executesql con parámetro</li>
+                            <li>• Identificadores → QUOTENAME + validar</li>
+                            <li>• ORDER BY → lista blanca obligatoria</li>
+                            <li>• Debug → parámetro @Debug = 1</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="card" style="margin-top: 1.5rem;">
+                    <h2>📅 Próxima Sesión</h2>
+                    <div style="padding: 1rem; background: #f8fafc; border-radius: 10px; text-align: center;">
+                        <div style="font-size: 0.85rem; color: var(--text-light);">SEMANA 7 • SESIÓN 14</div>
+                        <div style="font-size: 1.2rem; font-weight: 600; color: var(--primary-dark); margin: 0.5rem 0;">
+                            ⏰ SQL Agent y Automatización
+                        </div>
+                        <div style="font-size: 0.85rem; color: var(--text-light);">
+                            Jobs, Schedules, Alertas, Mantenimiento automatizado
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <footer>
+            <p>SQL Server Intermedio 2026 • Sesión 13 de 16 • SQL Dinámico Seguro</p>
+        </footer>
+    </div>
+</body>
+</html>

@@ -1,0 +1,332 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║           CHEATSHEET: TABLAS TEMPORALES Y VARIABLES DE TABLA                 ║
+║                    SQL Server Intermedio - Sesión 11                         ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+═══════════════════════════════════════════════════════════════════════════════
+ COMPARATIVA RÁPIDA
+═══════════════════════════════════════════════════════════════════════════════
+
+┌─────────────────┬────────────────┬────────────────┬────────────────┐
+│ Característica  │ #temp          │ ##temp         │ @variable      │
+├─────────────────┼────────────────┼────────────────┼────────────────┤
+│ Ubicación       │ tempdb         │ tempdb         │ memoria/tempdb │
+│ Scope           │ Sesión/SP      │ Global         │ Batch/SP       │
+│ Visible SP hijo │ SÍ             │ SÍ             │ NO             │
+│ Estadísticas    │ SÍ             │ SÍ             │ 2019+          │
+│ Rollback afecta │ SÍ             │ SÍ             │ NO             │
+│ Índices         │ Todos          │ Todos          │ Limitados      │
+│ ALTER TABLE     │ SÍ             │ SÍ             │ NO             │
+│ Ideal para      │ > 100 filas    │ Cross-session  │ < 100 filas    │
+└─────────────────┴────────────────┴────────────────┴────────────────┘
+
+═══════════════════════════════════════════════════════════════════════════════
+ SINTAXIS: TABLA TEMPORAL LOCAL (#temp)
+═══════════════════════════════════════════════════════════════════════════════
+
+CREAR EXPLÍCITAMENTE:
+─────────────────────
+    IF OBJECT_ID('tempdb..#MiTabla') IS NOT NULL
+        DROP TABLE #MiTabla;
+    
+    CREATE TABLE #MiTabla (
+        ID INT PRIMARY KEY,
+        Nombre VARCHAR(100),
+        Fecha DATE
+    );
+
+CREAR CON SELECT INTO (más común):
+──────────────────────────────────
+    SELECT columnas
+    INTO #MiTabla
+    FROM TablaOrigen
+    WHERE condicion;
+
+AGREGAR ÍNDICES (después de cargar):
+────────────────────────────────────
+    CREATE INDEX IX_Nombre ON #MiTabla(Nombre);
+    CREATE INDEX IX_Fecha ON #MiTabla(Fecha) INCLUDE (Nombre);
+
+VERIFICAR EXISTENCIA EN TEMPDB:
+───────────────────────────────
+    SELECT name FROM tempdb.sys.tables WHERE name LIKE '#MiTabla%';
+
+ELIMINAR:
+─────────
+    DROP TABLE IF EXISTS #MiTabla;  -- SQL 2016+
+    -- o
+    IF OBJECT_ID('tempdb..#MiTabla') IS NOT NULL DROP TABLE #MiTabla;
+
+═══════════════════════════════════════════════════════════════════════════════
+ SINTAXIS: TABLA TEMPORAL GLOBAL (##temp)
+═══════════════════════════════════════════════════════════════════════════════
+
+    IF OBJECT_ID('tempdb..##MiTablaGlobal') IS NOT NULL
+        DROP TABLE ##MiTablaGlobal;
+    
+    CREATE TABLE ##MiTablaGlobal (
+        ID INT,
+        Dato VARCHAR(100)
+    );
+    
+    -- Visible desde CUALQUIER sesión
+    -- Se elimina cuando la sesión creadora termina Y nadie la está usando
+
+═══════════════════════════════════════════════════════════════════════════════
+ SINTAXIS: VARIABLE DE TABLA (@table)
+═══════════════════════════════════════════════════════════════════════════════
+
+DECLARACIÓN BÁSICA:
+───────────────────
+    DECLARE @MiVariable TABLE (
+        ID INT PRIMARY KEY NONCLUSTERED,
+        Nombre VARCHAR(100) NOT NULL,
+        Monto DECIMAL(18,2) CHECK (Monto > 0)
+    );
+
+CON ÍNDICES:
+────────────
+    DECLARE @MiVariable TABLE (
+        ID INT PRIMARY KEY NONCLUSTERED,
+        CuentaID INT NOT NULL,
+        Fecha DATE,
+        INDEX IX_Cuenta NONCLUSTERED (CuentaID),
+        INDEX IX_Fecha NONCLUSTERED (Fecha)
+    );
+
+INSERTAR:
+─────────
+    INSERT INTO @MiVariable (ID, Nombre, Monto)
+    SELECT col1, col2, col3 FROM TablaOrigen;
+
+═══════════════════════════════════════════════════════════════════════════════
+ TABLE-VALUED PARAMETERS (TVP)
+═══════════════════════════════════════════════════════════════════════════════
+
+PASO 1 - CREAR EL TYPE:
+───────────────────────
+    CREATE TYPE dbo.TipoListaIDs AS TABLE (
+        ID INT PRIMARY KEY
+    );
+
+PASO 2 - CREAR SP CON TVP:
+──────────────────────────
+    CREATE PROCEDURE dbo.sp_MiProcedimiento
+        @ListaIDs dbo.TipoListaIDs READONLY  -- ¡READONLY obligatorio!
+    AS
+    BEGIN
+        SELECT t.* FROM MiTabla t
+        INNER JOIN @ListaIDs ids ON t.ID = ids.ID;
+    END;
+
+PASO 3 - USAR EL TVP:
+─────────────────────
+    DECLARE @MisIDs dbo.TipoListaIDs;
+    INSERT INTO @MisIDs VALUES (1), (2), (3);
+    EXEC dbo.sp_MiProcedimiento @ListaIDs = @MisIDs;
+
+ELIMINAR TYPE:
+──────────────
+    DROP TYPE IF EXISTS dbo.TipoListaIDs;  -- Primero eliminar SPs que lo usen
+
+═══════════════════════════════════════════════════════════════════════════════
+ GUÍA DE SELECCIÓN RÁPIDA
+═══════════════════════════════════════════════════════════════════════════════
+
+    ┌─────────────────────────────────────┬─────────────┐
+    │ ESCENARIO                           │ USAR        │
+    ├─────────────────────────────────────┼─────────────┤
+    │ Menos de 100 filas                  │ @variable   │
+    │ 100 - 10,000 filas, queries simples │ Cualquiera  │
+    │ Más de 10,000 filas                 │ #temp       │
+    │ JOINs complejos                     │ #temp       │
+    │ Compartir con SP hijo               │ #temp       │
+    │ Compartir entre sesiones            │ ##temp      │
+    │ Log que sobreviva ROLLBACK          │ @variable   │
+    │ Pasar lista de IDs a SP             │ TVP         │
+    │ Múltiples queries sobre mismos datos│ #temp       │
+    │ Solo lectura, conjunto pequeño      │ CTE         │
+    └─────────────────────────────────────┴─────────────┘
+
+═══════════════════════════════════════════════════════════════════════════════
+ SCOPE Y VISIBILIDAD
+═══════════════════════════════════════════════════════════════════════════════
+
+#temp CREADA EN SESIÓN:
+───────────────────────
+    Sesión Principal ─────► #MiTemp (visible)
+         │
+         └──► SP Hijo 1 ──► #MiTemp (visible)
+                  │
+                  └──► SP Nieto ──► #MiTemp (visible)
+
+#temp CREADA EN SP:
+───────────────────
+    Sesión Principal
+         │
+         └──► SP_Padre ──► #TempDelSP (creada aquí)
+                  │
+                  └──► SP Hijo ──► #TempDelSP (visible)
+         │
+         └──► #TempDelSP ya NO existe aquí
+
+@variable:
+──────────
+    Sesión Principal ─────► @MiVar (solo aquí)
+         │
+         └──► SP Hijo ──► @MiVar NO visible (scope limitado al batch)
+
+═══════════════════════════════════════════════════════════════════════════════
+ ESTADÍSTICAS Y CARDINALIDAD
+═══════════════════════════════════════════════════════════════════════════════
+
+PROBLEMA CON @variable (pre-2019):
+──────────────────────────────────
+    - SQL Server estima SIEMPRE 1 fila
+    - Planes de ejecución subóptimos
+    - Solución: OPTION (RECOMPILE)
+
+SQL SERVER 2019+:
+─────────────────
+    - Table Variable Deferred Compilation
+    - Compilación diferida hasta conocer el conteo real
+    - Activo con compatibility_level >= 150
+
+VERIFICAR NIVEL:
+────────────────
+    SELECT compatibility_level FROM sys.databases WHERE name = 'MiDB';
+
+FORZAR RECOMPILACIÓN (si necesario):
+────────────────────────────────────
+    SELECT * FROM @MiVariable t JOIN OtraTabla o ON t.ID = o.ID
+    OPTION (RECOMPILE);
+
+═══════════════════════════════════════════════════════════════════════════════
+ PATRONES COMUNES
+═══════════════════════════════════════════════════════════════════════════════
+
+PATRÓN 1: PROCESO MULTI-PASO
+────────────────────────────
+    -- Paso 1: Datos base
+    SELECT * INTO #Paso1 FROM Origen WHERE ...
+    
+    -- Paso 2: Agregaciones
+    SELECT Col, SUM(Val) INTO #Paso2 FROM #Paso1 GROUP BY Col
+    
+    -- Paso 3: Enriquecimiento
+    SELECT p.*, r.Info INTO #Paso3 FROM #Paso2 p JOIN Ref r ON ...
+    
+    -- Resultado final
+    SELECT * FROM #Paso3 ORDER BY ...
+
+PATRÓN 2: LOG INMUNE A ROLLBACK
+───────────────────────────────
+    DECLARE @Log TABLE (Paso INT IDENTITY, Mensaje VARCHAR(200));
+    
+    INSERT INTO @Log VALUES ('Inicio');
+    BEGIN TRY
+        BEGIN TRAN;
+        INSERT INTO @Log VALUES ('En transacción');
+        RAISERROR('Error', 16, 1);
+        COMMIT;
+    END TRY
+    BEGIN CATCH
+        ROLLBACK;
+        INSERT INTO @Log VALUES ('Rollback hecho');
+    END CATCH;
+    
+    SELECT * FROM @Log;  -- Muestra TODO
+
+PATRÓN 3: STAGING PARA ETL
+──────────────────────────
+    -- Staging
+    SELECT * INTO #Staging FROM OrigenExterno;
+    
+    -- Limpiar/transformar
+    UPDATE #Staging SET Campo = TRIM(Campo);
+    DELETE FROM #Staging WHERE Campo IS NULL;
+    
+    -- Cargar
+    INSERT INTO TablaDestino SELECT * FROM #Staging;
+
+═══════════════════════════════════════════════════════════════════════════════
+ MEJORES PRÁCTICAS
+═══════════════════════════════════════════════════════════════════════════════
+
+✓ Siempre verificar existencia antes de crear
+✓ Crear índices DESPUÉS de cargar datos masivos
+✓ Usar TRUNCATE en vez de DELETE para limpiar
+✓ Usar #temp para conjuntos grandes con JOINs
+✓ Usar @variable para conjuntos pequeños o logs
+✓ Usar TVP para pasar listas de valores a SPs
+✓ No abusar de tablas temporales cuando CTE basta
+
+✗ Evitar ##temp si no es necesario compartir
+✗ No crear índices antes de carga masiva
+✗ No usar @variable con miles de filas y JOINs complejos
+✗ No olvidar READONLY en parámetros TVP
+
+═══════════════════════════════════════════════════════════════════════════════
+ ERRORES COMUNES Y SOLUCIONES
+═══════════════════════════════════════════════════════════════════════════════
+
+ERROR: "Invalid object name '#MiTabla'"
+───────────────────────────────────────
+    Causa: La tabla no existe o fuera de scope
+    Solución: Verificar scope y creación
+
+ERROR: "Cannot alter type because it is being referenced"
+─────────────────────────────────────────────────────────
+    Causa: Un SP usa el TYPE
+    Solución: Drop SP antes de Drop TYPE
+
+ERROR: Plan lento con @variable
+───────────────────────────────
+    Causa: Estimación de 1 fila
+    Solución: OPTION(RECOMPILE) o usar #temp
+
+ERROR: "tempdb full"
+────────────────────
+    Causa: Tablas temporales muy grandes sin limpiar
+    Solución: DROP TABLE explícito, TRUNCATE, revisar tamaño de tempdb
+
+═══════════════════════════════════════════════════════════════════════════════
+ MONITOREO DE TABLAS TEMPORALES
+═══════════════════════════════════════════════════════════════════════════════
+
+VER TABLAS TEMPORALES ACTIVAS:
+──────────────────────────────
+    SELECT 
+        name AS Tabla,
+        create_date,
+        OBJECT_ID('tempdb..' + name) AS ObjectID
+    FROM tempdb.sys.tables 
+    WHERE name LIKE '#%';
+
+VER ESPACIO EN TEMPDB:
+──────────────────────
+    SELECT 
+        SUM(size) * 8 / 1024 AS TamanioMB,
+        SUM(FILEPROPERTY(name, 'SpaceUsed')) * 8 / 1024 AS UsadoMB
+    FROM tempdb.sys.database_files;
+
+VER ESTADÍSTICAS DE TABLA TEMPORAL:
+───────────────────────────────────
+    DBCC SHOW_STATISTICS ('tempdb..#MiTabla', 'IX_MiIndice');
+
+═══════════════════════════════════════════════════════════════════════════════
+ RESUMEN DE SINTAXIS RÁPIDA
+═══════════════════════════════════════════════════════════════════════════════
+
+    #temp           SELECT INTO #t FROM ...     DROP TABLE IF EXISTS #t
+    ##temp          CREATE TABLE ##t (...)      Visible globalmente
+    @variable       DECLARE @t TABLE (...)      Scope limitado, no rollback
+    TVP             CREATE TYPE + READONLY      Para pasar listas a SP
+    
+    Índices:        CREATE INDEX IX_x ON #t(col) -- Después de cargar
+    Verificar:      OBJECT_ID('tempdb..#t')
+    Estadísticas:   UPDATE STATISTICS #t
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  Sesión 11 • SQL Intermedio 2026 • Tablas Temporales y Variables             ║
+╚══════════════════════════════════════════════════════════════════════════════╝

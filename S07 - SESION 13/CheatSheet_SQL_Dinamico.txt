@@ -1,0 +1,335 @@
+================================================================================
+                    CHEATSHEET - SQL DINÁMICO SEGURO
+                        Sesión 13 - SQL Intermedio
+================================================================================
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                         ÁRBOL DE DECISIÓN                                    ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║                                                                              ║
+║   ¿Necesitas SQL Dinámico?                                                   ║
+║   │                                                                          ║
+║   ├─ ¿Es un VALOR de búsqueda?                                               ║
+║   │   └─► NO necesitas dinámico, usa parámetro normal                        ║
+║   │                                                                          ║
+║   ├─ ¿Es nombre de TABLA o COLUMNA?                                          ║
+║   │   └─► SÍ necesitas dinámico + VALIDAR + QUOTENAME                        ║
+║   │                                                                          ║
+║   ├─ ¿Son FILTROS opcionales?                                                ║
+║   │   └─► Dinámico con sp_executesql + parámetros                            ║
+║   │                                                                          ║
+║   ├─ ¿Es ORDER BY dinámico?                                                  ║
+║   │   └─► Lista blanca de columnas + CASE                                    ║
+║   │                                                                          ║
+║   └─ ¿Es DDL (CREATE/ALTER)?                                                 ║
+║       └─► Dinámico obligatorio, validar todo                                 ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+================================================================================
+                     EXEC vs sp_executesql
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ EXEC (@sql)                         │ sp_executesql @sql, @params, @var    │
+├─────────────────────────────────────┼─────────────────────────────────────────┤
+│ ❌ Sin parámetros                   │ ✓ Parámetros entrada/salida            │
+│ ❌ No cachea planes eficiente       │ ✓ Reutiliza planes de ejecución        │
+│ ❌ Vulnerable a SQL Injection       │ ✓ Previene SQL Injection               │
+│ ❌ Sin OUTPUT directo               │ ✓ Parámetros OUTPUT                    │
+│ ⚠️ Solo para DDL o nombres          │ ✓ Para TODO tipo de consultas          │
+└─────────────────────────────────────┴─────────────────────────────────────────┘
+
+================================================================================
+                        SINTAXIS COMPLETA
+================================================================================
+
+▸ EXEC BÁSICO (solo identificadores, nunca valores)
+────────────────────────────────────────────────────
+
+  DECLARE @sql NVARCHAR(MAX);
+  SET @sql = N'SELECT * FROM ' + QUOTENAME(@NombreTabla);
+  EXEC (@sql);
+
+▸ sp_executesql CON PARÁMETROS
+────────────────────────────────────────────────────
+
+  DECLARE @sql NVARCHAR(MAX);
+  DECLARE @params NVARCHAR(500);
+  
+  SET @sql = N'SELECT * FROM Tabla WHERE Columna = @Valor';
+  SET @params = N'@Valor NVARCHAR(100)';
+  
+  EXEC sp_executesql 
+      @stmt = @sql,
+      @params = @params,
+      @Valor = @MiVariable;
+
+▸ sp_executesql CON OUTPUT
+────────────────────────────────────────────────────
+
+  DECLARE @Total INT;
+  
+  SET @sql = N'SELECT @Count = COUNT(*) FROM Tabla WHERE X = @V';
+  SET @params = N'@V INT, @Count INT OUTPUT';
+  
+  EXEC sp_executesql @sql, @params,
+      @V = @MiValor,
+      @Count = @Total OUTPUT;
+  
+  SELECT @Total;
+
+▸ QUOTENAME PARA IDENTIFICADORES
+────────────────────────────────────────────────────
+
+  QUOTENAME('MiTabla')          → [MiTabla]
+  QUOTENAME('Mi Tabla')         → [Mi Tabla]
+  QUOTENAME('valor', '''')      → 'valor'
+  QUOTENAME('valor', '"')       → "valor"
+
+================================================================================
+                      VALIDACIÓN DE OBJETOS
+================================================================================
+
+▸ VALIDAR QUE TABLA EXISTE
+────────────────────────────────────────────────────
+
+  IF EXISTS (
+      SELECT 1 FROM INFORMATION_SCHEMA.TABLES 
+      WHERE TABLE_SCHEMA = @Schema 
+        AND TABLE_NAME = @Tabla
+  )
+
+▸ VALIDAR QUE COLUMNA EXISTE
+────────────────────────────────────────────────────
+
+  IF EXISTS (
+      SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS 
+      WHERE TABLE_NAME = @Tabla 
+        AND COLUMN_NAME = @Columna
+  )
+
+▸ VALIDAR TIPO DE COLUMNA
+────────────────────────────────────────────────────
+
+  SELECT DATA_TYPE 
+  FROM INFORMATION_SCHEMA.COLUMNS 
+  WHERE TABLE_NAME = @Tabla 
+    AND COLUMN_NAME = @Columna;
+
+================================================================================
+                        PATRONES SEGUROS
+================================================================================
+
+▸ BÚSQUEDA CON FILTROS OPCIONALES
+────────────────────────────────────────────────────
+
+  DECLARE @sql NVARCHAR(MAX) = N'SELECT * FROM T WHERE 1=1';
+  
+  IF @Param1 IS NOT NULL
+      SET @sql = @sql + N' AND Col1 = @P1';
+  IF @Param2 IS NOT NULL
+      SET @sql = @sql + N' AND Col2 = @P2';
+  
+  EXEC sp_executesql @sql, N'@P1 INT, @P2 VARCHAR(50)',
+      @P1 = @Param1, @P2 = @Param2;
+
+▸ ORDER BY DINÁMICO (LISTA BLANCA)
+────────────────────────────────────────────────────
+
+  DECLARE @OrderColumn NVARCHAR(50) = CASE @OrderBy
+      WHEN 'Nombre' THEN 'Nombre'
+      WHEN 'Fecha' THEN 'FechaRegistro'
+      WHEN 'Monto' THEN 'Monto'
+      ELSE 'ID'  -- Default seguro
+  END;
+  
+  SET @sql = @sql + N' ORDER BY ' + QUOTENAME(@OrderColumn);
+
+▸ CONSULTA DE TABLA DINÁMICA COMPLETA
+────────────────────────────────────────────────────
+
+  -- 1. Validar tabla
+  IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES 
+                 WHERE TABLE_NAME = @Tabla)
+      RAISERROR('Tabla no existe', 16, 1);
+  
+  -- 2. Construir con QUOTENAME
+  SET @sql = N'SELECT TOP (@N) * FROM ' + QUOTENAME(@Tabla);
+  
+  -- 3. Ejecutar con parámetros
+  EXEC sp_executesql @sql, N'@N INT', @N = @Top;
+
+================================================================================
+                      SQL INJECTION - EJEMPLOS
+================================================================================
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║ ATAQUE                    │ INPUT MALICIOSO          │ EFECTO               ║
+╠═══════════════════════════╪══════════════════════════╪══════════════════════╣
+║ Bypass autenticación      │ ' OR '1'='1              │ Acceso sin password  ║
+║ Comentar resto SQL        │ admin'--                 │ Ignora condiciones   ║
+║ Stacked queries           │ '; DROP TABLE X;--       │ Ejecuta DDL          ║
+║ UNION injection           │ ' UNION SELECT pwd FROM  │ Extrae datos         ║
+║ Blind injection           │ ' AND 1=1 --             │ Infiere datos        ║
+╚═══════════════════════════╧══════════════════════════╧══════════════════════╝
+
+PREVENCIÓN:
+  ✓ NUNCA concatenar input del usuario como SQL
+  ✓ SIEMPRE usar sp_executesql con parámetros
+  ✓ Validar/escapar identificadores con QUOTENAME
+  ✓ Lista blanca para ORDER BY, nombres de tabla
+
+================================================================================
+                    PLANTILLA PROCEDIMIENTO SEGURO
+================================================================================
+
+  CREATE PROCEDURE sp_ConsultaDinamica
+      @Tabla NVARCHAR(128),
+      @Filtro NVARCHAR(100) = NULL,
+      @Debug BIT = 0
+  AS
+  BEGIN
+      SET NOCOUNT ON;
+      
+      DECLARE @sql NVARCHAR(MAX);
+      DECLARE @params NVARCHAR(500);
+      
+      BEGIN TRY
+          -- 1. VALIDAR identificadores
+          IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES 
+                         WHERE TABLE_NAME = @Tabla)
+          BEGIN
+              RAISERROR('Tabla no válida: %s', 16, 1, @Tabla);
+              RETURN;
+          END;
+          
+          -- 2. CONSTRUIR SQL con QUOTENAME
+          SET @sql = N'SELECT * FROM ' + QUOTENAME(@Tabla);
+          
+          IF @Filtro IS NOT NULL
+              SET @sql = @sql + N' WHERE Columna = @pFiltro';
+          
+          SET @params = N'@pFiltro NVARCHAR(100)';
+          
+          -- 3. DEBUG (opcional)
+          IF @Debug = 1
+          BEGIN
+              PRINT '-- SQL: ' + @sql;
+              RETURN;
+          END;
+          
+          -- 4. EJECUTAR con sp_executesql
+          EXEC sp_executesql @sql, @params, @pFiltro = @Filtro;
+          
+      END TRY
+      BEGIN CATCH
+          -- 5. MANEJO DE ERRORES
+          PRINT 'Error en SQL: ' + @sql;
+          THROW;
+      END CATCH;
+  END;
+
+================================================================================
+                        PIVOT DINÁMICO
+================================================================================
+
+  -- Obtener columnas dinámicamente
+  DECLARE @columnas NVARCHAR(MAX);
+  
+  SELECT @columnas = STRING_AGG(QUOTENAME(ValorColumna), ',')
+  FROM (SELECT DISTINCT ValorColumna FROM MiTabla) t;
+  
+  -- Construir PIVOT
+  SET @sql = N'
+      SELECT * 
+      FROM (SELECT A, B, C FROM Origen) src
+      PIVOT (SUM(C) FOR B IN (' + @columnas + N')) pvt';
+  
+  EXEC sp_executesql @sql;
+
+================================================================================
+                      DEBUGGING SQL DINÁMICO
+================================================================================
+
+  TÉCNICA 1: PRINT antes de EXEC
+  ────────────────────────────────
+  PRINT @sql;
+  EXEC sp_executesql @sql, ...
+
+  TÉCNICA 2: Parámetro @Debug
+  ────────────────────────────────
+  IF @Debug = 1
+      PRINT @sql;
+  ELSE
+      EXEC sp_executesql @sql, ...
+
+  TÉCNICA 3: Guardar en log
+  ────────────────────────────────
+  INSERT INTO SQLLog (SQL, Fecha)
+  VALUES (@sql, GETDATE());
+
+  TÉCNICA 4: TRY...CATCH con contexto
+  ────────────────────────────────
+  BEGIN CATCH
+      PRINT 'SQL fallido: ' + @sql;
+      THROW;
+  END CATCH;
+
+================================================================================
+                     ERRORES COMUNES Y SOLUCIONES
+================================================================================
+
+┌─────────────────────────────────────┬────────────────────────────────────────┐
+│ ERROR                               │ SOLUCIÓN                               │
+├─────────────────────────────────────┼────────────────────────────────────────┤
+│ Cannot parameterize table name      │ Usar QUOTENAME + validación            │
+│ Plan cache pollution                │ Usar sp_executesql con @params         │
+│ SQL Injection detected              │ Parametrizar valores, validar identi.  │
+│ Incorrect syntax ORDER BY           │ Lista blanca de columnas               │
+│ Output parameter not returned       │ Usar @param OUTPUT en sp_executesql    │
+│ String truncation                   │ Usar NVARCHAR(MAX) para @sql           │
+└─────────────────────────────────────┴────────────────────────────────────────┘
+
+================================================================================
+                     CHECKLIST DE SEGURIDAD
+================================================================================
+
+  □ ¿Los VALORES vienen como parámetros de sp_executesql?
+  □ ¿Los IDENTIFICADORES están validados contra catálogos?
+  □ ¿Se usa QUOTENAME para tablas/columnas dinámicas?
+  □ ¿ORDER BY usa lista blanca de columnas?
+  □ ¿Hay parámetro @Debug para troubleshooting?
+  □ ¿TRY...CATCH captura y loggea errores?
+  □ ¿Se valida que el objeto existe antes de usarlo?
+  □ ¿Se rechaza input inválido con error claro?
+
+================================================================================
+                          REGLA DE ORO
+================================================================================
+
+  ╔═══════════════════════════════════════════════════════════════════════════╗
+  ║                                                                           ║
+  ║   "Si viene del usuario y es un VALOR → sp_executesql con parámetro"     ║
+  ║                                                                           ║
+  ║   "Si viene del usuario y es un IDENTIFICADOR → validar + QUOTENAME"     ║
+  ║                                                                           ║
+  ║   "Si NO necesitas dinámico → NO lo uses (SQL estático es mejor)"        ║
+  ║                                                                           ║
+  ╚═══════════════════════════════════════════════════════════════════════════╝
+
+================================================================================
+                    RESUMEN DE FUNCIONES ÚTILES
+================================================================================
+
+  QUOTENAME(@name)           Escapa identificador con []
+  QUOTENAME(@val, '''')      Escapa valor con ''
+  STRING_AGG(x, ',')         Concatena valores para PIVOT
+  OBJECT_ID(@name)           Verifica si objeto existe
+  INFORMATION_SCHEMA.*       Catálogos para validación
+  sys.columns                Metadatos de columnas
+  sys.tables                 Metadatos de tablas
+
+================================================================================
+              SQL Intermedio 2026 • Sesión 13 • CheatSheet
+================================================================================

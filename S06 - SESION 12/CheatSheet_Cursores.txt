@@ -1,0 +1,300 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║            CHEATSHEET: CURSORES VS OPERACIONES SET-BASED                     ║
+║                    SQL Server Intermedio - Sesión 12                         ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+═══════════════════════════════════════════════════════════════════════════════
+ REGLA DE ORO
+═══════════════════════════════════════════════════════════════════════════════
+
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │  "Si puedes hacerlo sin cursor, hazlo sin cursor"                       │
+    │                                                                         │
+    │  SQL Server está optimizado para operaciones SET-BASED                  │
+    │  Los cursores procesan FILA POR FILA = más lento                        │
+    └─────────────────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════════════════
+ TIPOS DE CURSOR (de más a menos eficiente)
+═══════════════════════════════════════════════════════════════════════════════
+
+┌─────────────────┬────────────────────────────────────────────────────────────┐
+│ FAST_FORWARD    │ Solo lectura, solo adelante. MÁS RÁPIDO. Usar siempre que │
+│                 │ sea posible si solo necesitas leer datos.                  │
+├─────────────────┼────────────────────────────────────────────────────────────┤
+│ STATIC          │ Copia datos a tempdb. No ve cambios posteriores.          │
+│                 │ Bueno si necesitas snapshot consistente.                   │
+├─────────────────┼────────────────────────────────────────────────────────────┤
+│ KEYSET          │ Solo keys en tempdb. Ve cambios de valores, no nuevas     │
+│                 │ filas. Término medio entre STATIC y DYNAMIC.              │
+├─────────────────┼────────────────────────────────────────────────────────────┤
+│ DYNAMIC         │ Ve todos los cambios en tiempo real. MÁS LENTO.           │
+│                 │ Usar solo si realmente necesitas datos actualizados.      │
+└─────────────────┴────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════════════════
+ SINTAXIS COMPLETA DE CURSOR
+═══════════════════════════════════════════════════════════════════════════════
+
+    -- 1. DECLARAR variables para almacenar datos
+    DECLARE @Var1 INT, @Var2 VARCHAR(100);
+    
+    -- 2. DECLARAR el cursor
+    DECLARE mi_cursor CURSOR 
+        LOCAL           -- Solo visible en este batch/SP
+        FAST_FORWARD    -- Solo lectura, solo adelante
+    FOR
+        SELECT Col1, Col2 FROM MiTabla WHERE Condicion;
+    
+    -- 3. ABRIR el cursor
+    OPEN mi_cursor;
+    
+    -- 4. FETCH primera fila
+    FETCH NEXT FROM mi_cursor INTO @Var1, @Var2;
+    
+    -- 5. PROCESAR en loop
+    WHILE @@FETCH_STATUS = 0
+    BEGIN
+        -- Tu lógica aquí
+        PRINT @Var1;
+        
+        FETCH NEXT FROM mi_cursor INTO @Var1, @Var2;
+    END;
+    
+    -- 6. CERRAR el cursor
+    CLOSE mi_cursor;
+    
+    -- 7. LIBERAR el cursor
+    DEALLOCATE mi_cursor;
+
+═══════════════════════════════════════════════════════════════════════════════
+ @@FETCH_STATUS
+═══════════════════════════════════════════════════════════════════════════════
+
+    0  = Fetch exitoso (hay fila)
+   -1  = Fetch falló (fin del cursor o error)
+   -2  = Fila no encontrada (KEYSET/DYNAMIC cuando la fila fue eliminada)
+
+═══════════════════════════════════════════════════════════════════════════════
+ ÁRBOL DE DECISIÓN: ¿CURSOR O SET-BASED?
+═══════════════════════════════════════════════════════════════════════════════
+
+    ¿Procesas filas individualmente?
+    │
+    ├─ NO ──► SET-BASED (UPDATE, INSERT...SELECT, MERGE, DELETE)
+    │
+    └─ SÍ
+       │
+       ├─ ¿Window function? ──► SUM() OVER, ROW_NUMBER(), LAG/LEAD
+       │
+       ├─ ¿CROSS/OUTER APPLY? ──► Función que retorna tabla por fila
+       │
+       ├─ ¿STRING_AGG? ──► Concatenar valores
+       │
+       ├─ ¿CTE recursivo? ──► Navegar jerarquías
+       │
+       └─ No hay alternativa ──► CURSOR LOCAL FAST_FORWARD
+                                 + TRY...CATCH
+                                 + CLOSE + DEALLOCATE
+
+═══════════════════════════════════════════════════════════════════════════════
+ CASOS LEGÍTIMOS PARA CURSORES
+═══════════════════════════════════════════════════════════════════════════════
+
+    ✓ Ejecutar un SP una vez por cada fila
+    ✓ Tareas DBA: recorrer bases de datos, tablas, índices
+    ✓ Operaciones que dependen del resultado de la fila anterior
+    ✓ Generación de código dinámico complejo
+    ✓ Conjunto MUY pequeño donde claridad > performance
+
+═══════════════════════════════════════════════════════════════════════════════
+ ALTERNATIVAS SET-BASED COMUNES
+═══════════════════════════════════════════════════════════════════════════════
+
+EN LUGAR DE CURSOR PARA...              USAR...
+─────────────────────────────────────────────────────────────────────────────
+UPDATE condicional fila por fila    →   UPDATE con CASE WHEN
+INSERT fila por fila                →   INSERT...SELECT
+Concatenar strings                  →   STRING_AGG (2017+)
+Running total / acumulados          →   SUM() OVER (ROWS UNBOUNDED PRECEDING)
+Numerar filas                       →   ROW_NUMBER() OVER
+Acceder fila anterior/siguiente     →   LAG() / LEAD()
+Comparar con grupo                  →   FIRST_VALUE() / LAST_VALUE()
+Ejecutar query por cada fila        →   CROSS APPLY + función
+Verificar existe e insert/update    →   MERGE
+Navegar jerarquías                  →   CTE recursivo
+
+═══════════════════════════════════════════════════════════════════════════════
+ PATRONES DE REFACTORIZACIÓN
+═══════════════════════════════════════════════════════════════════════════════
+
+1. UPDATE CON CASE (en lugar de IF dentro de cursor):
+─────────────────────────────────────────────────────
+    UPDATE MiTabla
+    SET Columna = CASE 
+        WHEN Condicion1 THEN Valor1
+        WHEN Condicion2 THEN Valor2
+        ELSE ValorDefault
+    END;
+
+2. CTE + UPDATE (para cálculos complejos):
+──────────────────────────────────────────
+    ;WITH Calculado AS (
+        SELECT ID, SomeCalculation AS NuevoValor
+        FROM MiTabla
+    )
+    UPDATE t
+    SET t.Columna = c.NuevoValor
+    FROM MiTabla t
+    INNER JOIN Calculado c ON t.ID = c.ID;
+
+3. CROSS APPLY (ejecutar función por cada fila):
+────────────────────────────────────────────────
+    SELECT m.*, f.*
+    FROM MiTabla m
+    CROSS APPLY dbo.MiFuncion(m.ID) f;
+
+4. STRING_AGG (concatenar valores):
+───────────────────────────────────
+    SELECT 
+        GrupoID,
+        STRING_AGG(Valor, ', ') AS ValoresConcatenados
+    FROM MiTabla
+    GROUP BY GrupoID;
+
+5. WINDOW FUNCTIONS (acumulados, ranking):
+──────────────────────────────────────────
+    SELECT 
+        *,
+        SUM(Monto) OVER (ORDER BY Fecha ROWS UNBOUNDED PRECEDING) AS Acumulado,
+        ROW_NUMBER() OVER (PARTITION BY Grupo ORDER BY Fecha) AS NumFila
+    FROM MiTabla;
+
+═══════════════════════════════════════════════════════════════════════════════
+ WHILE LOOP COMO ALTERNATIVA AL CURSOR
+═══════════════════════════════════════════════════════════════════════════════
+
+    -- Crear tabla numerada
+    SELECT 
+        ROW_NUMBER() OVER (ORDER BY ID) AS RowNum,
+        *
+    INTO #Temp
+    FROM MiTabla;
+    
+    DECLARE @Total INT = (SELECT COUNT(*) FROM #Temp);
+    DECLARE @i INT = 1;
+    
+    WHILE @i <= @Total
+    BEGIN
+        SELECT @Variable = Columna FROM #Temp WHERE RowNum = @i;
+        
+        -- Procesar
+        
+        SET @i = @i + 1;
+    END;
+
+═══════════════════════════════════════════════════════════════════════════════
+ MANEJO SEGURO DE CURSORES (TRY...CATCH)
+═══════════════════════════════════════════════════════════════════════════════
+
+    BEGIN TRY
+        DECLARE mi_cursor CURSOR LOCAL FAST_FORWARD FOR
+            SELECT columnas FROM tabla;
+        
+        OPEN mi_cursor;
+        FETCH NEXT FROM mi_cursor INTO @variables;
+        
+        WHILE @@FETCH_STATUS = 0
+        BEGIN
+            -- Lógica
+            FETCH NEXT FROM mi_cursor INTO @variables;
+        END;
+        
+        CLOSE mi_cursor;
+        DEALLOCATE mi_cursor;
+    END TRY
+    BEGIN CATCH
+        -- SIEMPRE limpiar en caso de error
+        IF CURSOR_STATUS('local', 'mi_cursor') >= 0
+            CLOSE mi_cursor;
+        IF CURSOR_STATUS('local', 'mi_cursor') >= -1
+            DEALLOCATE mi_cursor;
+        THROW;
+    END CATCH;
+
+═══════════════════════════════════════════════════════════════════════════════
+ CURSOR_STATUS() - VERIFICAR ESTADO
+═══════════════════════════════════════════════════════════════════════════════
+
+    CURSOR_STATUS('local', 'nombre_cursor')
+    CURSOR_STATUS('global', 'nombre_cursor')
+    
+    Retorna:
+     1  = Cursor abierto con filas
+     0  = Cursor abierto sin filas
+    -1  = Cursor cerrado
+    -2  = Cursor no existe
+    -3  = Cursor no existe (para 'variable')
+
+═══════════════════════════════════════════════════════════════════════════════
+ PERFORMANCE: CURSOR VS SET-BASED
+═══════════════════════════════════════════════════════════════════════════════
+
+    CURSOR                          SET-BASED
+    ─────────────────────────────────────────────────────────────
+    - N planes de ejecución         - 1 plan de ejecución
+    - N roundtrips cliente-server   - 1 roundtrip
+    - Sin paralelismo               - Puede paralelizar
+    - Bloqueos más largos           - Bloqueos más cortos
+    - Más memoria para estado       - Menos overhead
+    
+    Típicamente SET-BASED es 10x - 100x más rápido
+
+═══════════════════════════════════════════════════════════════════════════════
+ ERRORES COMUNES
+═══════════════════════════════════════════════════════════════════════════════
+
+✗ Olvidar CLOSE y DEALLOCATE
+  → Memory leak, cursor queda abierto
+
+✗ No usar LOCAL
+  → Cursor visible globalmente, posibles conflictos
+
+✗ Usar DYNAMIC cuando no es necesario
+  → Performance penalty innecesario
+
+✗ Cursor para operaciones que pueden ser SET-BASED
+  → Siempre intentar refactorizar primero
+
+✗ No manejar errores con TRY...CATCH
+  → Cursor queda abierto si hay excepción
+
+═══════════════════════════════════════════════════════════════════════════════
+ RESUMEN DE OPCIONES DE CURSOR
+═══════════════════════════════════════════════════════════════════════════════
+
+    DECLARE mi_cursor CURSOR
+        [LOCAL | GLOBAL]              -- Scope (siempre LOCAL)
+        [FORWARD_ONLY | SCROLL]       -- Dirección
+        [STATIC | KEYSET | DYNAMIC | FAST_FORWARD]  -- Tipo
+        [READ_ONLY | SCROLL_LOCKS | OPTIMISTIC]     -- Concurrencia
+    FOR
+        SELECT ...
+
+    RECOMENDACIÓN: CURSOR LOCAL FAST_FORWARD
+
+═══════════════════════════════════════════════════════════════════════════════
+ QUICK REFERENCE
+═══════════════════════════════════════════════════════════════════════════════
+
+    Declarar:    DECLARE c CURSOR LOCAL FAST_FORWARD FOR SELECT ...
+    Abrir:       OPEN c
+    Leer:        FETCH NEXT FROM c INTO @var1, @var2
+    Estado:      @@FETCH_STATUS (0=OK, -1=FIN)
+    Cerrar:      CLOSE c
+    Liberar:     DEALLOCATE c
+    Verificar:   CURSOR_STATUS('local', 'c')
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  Sesión 12 • SQL Intermedio 2026 • Cursores vs Set-Based                     ║
+╚══════════════════════════════════════════════════════════════════════════════╝

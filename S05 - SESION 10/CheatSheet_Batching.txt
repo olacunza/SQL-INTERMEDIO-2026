@@ -1,0 +1,305 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║          CHEATSHEET: BATCHING Y OPERACIONES MASIVAS - SQL SERVER             ║
+║                     Sesión 10 - SQL Intermedio 2026                          ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+================================================================================
+ 1. ¿POR QUÉ BATCHING?
+================================================================================
+
+    PROBLEMAS SIN BATCHING:
+    ┌──────────────────────────────────────────────────────────────────────────┐
+    │ ✗ Bloqueos extensos (minutos/horas)                                      │
+    │ ✗ Log de transacciones desbordado                                        │
+    │ ✗ Escalamiento de bloqueos (row→page→table)                              │
+    │ ✗ Timeouts en aplicaciones                                               │
+    │ ✗ Sin posibilidad de cancelar/resumir                                    │
+    └──────────────────────────────────────────────────────────────────────────┘
+
+    BENEFICIOS DEL BATCHING:
+    ┌──────────────────────────────────────────────────────────────────────────┐
+    │ ✓ Bloqueos cortos y controlados                                          │
+    │ ✓ Log de transacciones manejable                                         │
+    │ ✓ Posibilidad de pausar/resumir                                          │
+    │ ✓ Monitoreo de progreso                                                  │
+    │ ✓ Menor impacto en producción                                            │
+    └──────────────────────────────────────────────────────────────────────────┘
+
+
+================================================================================
+ 2. PATRÓN DELETE CON CHUNKING
+================================================================================
+
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │ DECLARE @BatchSize INT = 10000;                                         │
+    │ DECLARE @RowsAffected INT = 1;                                          │
+    │ DECLARE @Total INT = 0;                                                 │
+    │                                                                         │
+    │ WHILE @RowsAffected > 0                                                 │
+    │ BEGIN                                                                   │
+    │     DELETE TOP (@BatchSize)                                             │
+    │     FROM MiTabla                                                        │
+    │     WHERE Condicion = 'valor';                                          │
+    │                                                                         │
+    │     SET @RowsAffected = @@ROWCOUNT;                                     │
+    │     SET @Total = @Total + @RowsAffected;                                │
+    │                                                                         │
+    │     PRINT 'Eliminados: ' + CAST(@RowsAffected AS VARCHAR);              │
+    │                                                                         │
+    │     -- Pausa opcional                                                   │
+    │     -- WAITFOR DELAY '00:00:00.500';                                    │
+    │ END                                                                     │
+    └─────────────────────────────────────────────────────────────────────────┘
+
+
+================================================================================
+ 3. PATRÓN UPDATE CON CHUNKING
+================================================================================
+
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │ DECLARE @BatchSize INT = 5000;                                          │
+    │ DECLARE @RowsAffected INT = 1;                                          │
+    │                                                                         │
+    │ WHILE @RowsAffected > 0                                                 │
+    │ BEGIN                                                                   │
+    │     UPDATE TOP (@BatchSize) MiTabla                                     │
+    │     SET Columna = 'nuevo_valor',                                        │
+    │         FechaUpdate = GETDATE()                                         │
+    │     WHERE Columna = 'valor_anterior';                                   │
+    │                                                                         │
+    │     SET @RowsAffected = @@ROWCOUNT;                                     │
+    │ END                                                                     │
+    └─────────────────────────────────────────────────────────────────────────┘
+
+
+================================================================================
+ 4. MERGE - SINTAXIS COMPLETA
+================================================================================
+
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │ MERGE INTO TablaDestino AS Target                                       │
+    │ USING TablaFuente AS Source                                             │
+    │ ON Target.ID = Source.ID                                                │
+    │                                                                         │
+    │ -- Si existe y es diferente: UPDATE                                     │
+    │ WHEN MATCHED AND Target.Valor <> Source.Valor                           │
+    │ THEN UPDATE SET Target.Valor = Source.Valor                             │
+    │                                                                         │
+    │ -- Si no existe en destino: INSERT                                      │
+    │ WHEN NOT MATCHED BY TARGET                                              │
+    │ THEN INSERT (ID, Valor) VALUES (Source.ID, Source.Valor)                │
+    │                                                                         │
+    │ -- Si no existe en fuente: DELETE o UPDATE                              │
+    │ WHEN NOT MATCHED BY SOURCE                                              │
+    │ THEN DELETE  -- o UPDATE SET Activo = 0                                 │
+    │                                                                         │
+    │ -- Auditoría de cambios                                                 │
+    │ OUTPUT $action, INSERTED.*, DELETED.*;                                  │
+    └─────────────────────────────────────────────────────────────────────────┘
+
+
+================================================================================
+ 5. TRY_CONVERT VS TRY_CAST VS TRY_PARSE
+================================================================================
+
+    ╔════════════════╦═══════════════════════════════════════════════════════╗
+    ║ FUNCIÓN        ║ USO                                                   ║
+    ╠════════════════╬═══════════════════════════════════════════════════════╣
+    ║ TRY_CONVERT    ║ Conversión con estilo (fechas, números)               ║
+    ║                ║ TRY_CONVERT(DATE, '2024-01-15', 120)                  ║
+    ╠════════════════╬═══════════════════════════════════════════════════════╣
+    ║ TRY_CAST       ║ Conversión simple sin estilo                          ║
+    ║                ║ TRY_CAST('100' AS INT)                                ║
+    ╠════════════════╬═══════════════════════════════════════════════════════╣
+    ║ TRY_PARSE      ║ Conversión con cultura específica                     ║
+    ║                ║ TRY_PARSE('15/01/2024' AS DATE USING 'es-ES')         ║
+    ╚════════════════╩═══════════════════════════════════════════════════════╝
+
+    DIFERENCIA CLAVE:
+    • CAST/CONVERT tradicional → ERROR si falla
+    • TRY_CAST/TRY_CONVERT/TRY_PARSE → NULL si falla (sin error)
+
+
+================================================================================
+ 6. ESTILOS COMUNES TRY_CONVERT
+================================================================================
+
+    FECHAS:
+    ┌────────┬─────────────────────────────────────────────────────────────────┐
+    │ Estilo │ Formato                                                         │
+    ├────────┼─────────────────────────────────────────────────────────────────┤
+    │ 101    │ mm/dd/yyyy (USA)                                                │
+    │ 103    │ dd/mm/yyyy (Europeo)                                            │
+    │ 104    │ dd.mm.yyyy (Alemán)                                             │
+    │ 120    │ yyyy-mm-dd (ISO estándar) ← MÁS SEGURO                          │
+    │ 121    │ yyyy-mm-dd hh:mi:ss.mmm (ODBC)                                  │
+    └────────┴─────────────────────────────────────────────────────────────────┘
+
+
+================================================================================
+ 7. TRY_PARSE - CULTURAS COMUNES
+================================================================================
+
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │ -- Fecha español                                                        │
+    │ TRY_PARSE('15/01/2024' AS DATE USING 'es-ES')                          │
+    │                                                                         │
+    │ -- Fecha USA                                                            │
+    │ TRY_PARSE('01/15/2024' AS DATE USING 'en-US')                          │
+    │                                                                         │
+    │ -- Número español (1.234,56)                                            │
+    │ TRY_PARSE('1.234,56' AS DECIMAL(10,2) USING 'es-ES')                   │
+    │                                                                         │
+    │ -- Número USA (1,234.56)                                                │
+    │ TRY_PARSE('1,234.56' AS DECIMAL(10,2) USING 'en-US')                   │
+    └─────────────────────────────────────────────────────────────────────────┘
+
+
+================================================================================
+ 8. CHECKPOINT PATTERN
+================================================================================
+
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │ -- Tabla de checkpoint                                                  │
+    │ CREATE TABLE CheckpointProceso (                                        │
+    │     ProcesoID INT PRIMARY KEY,                                          │
+    │     UltimoIDProcesado BIGINT,                                          │
+    │     RegistrosProcesados INT,                                           │
+    │     Estado VARCHAR(20),                                                 │
+    │     FechaUpdate DATETIME                                                │
+    │ );                                                                      │
+    │                                                                         │
+    │ -- En el loop:                                                          │
+    │ UPDATE CheckpointProceso                                                │
+    │ SET UltimoIDProcesado = @UltimoID,                                     │
+    │     RegistrosProcesados = @Total,                                      │
+    │     FechaUpdate = GETDATE()                                            │
+    │ WHERE ProcesoID = @MiProceso;                                          │
+    │                                                                         │
+    │ -- Para resumir: Leer checkpoint al inicio                             │
+    └─────────────────────────────────────────────────────────────────────────┘
+
+
+================================================================================
+ 9. TAMAÑOS DE BATCH RECOMENDADOS
+================================================================================
+
+    ╔═══════════════════════════════╦══════════════════════════════════════════╗
+    ║ ESCENARIO                     ║ BATCH SIZE                               ║
+    ╠═══════════════════════════════╬══════════════════════════════════════════╣
+    ║ DELETE simple                 ║ 5,000 - 10,000                           ║
+    ║ UPDATE con growth             ║ 2,000 - 5,000                            ║
+    ║ INSERT masivo                 ║ 10,000 - 50,000                          ║
+    ║ MERGE complejo                ║ 1,000 - 5,000                            ║
+    ║ Producción crítica            ║ 1,000 - 2,000 (más conservador)          ║
+    ║ Mantenimiento nocturno        ║ 10,000 - 50,000 (más agresivo)           ║
+    ╚═══════════════════════════════╩══════════════════════════════════════════╝
+
+
+================================================================================
+ 10. OUTPUT CLAUSE CON MERGE
+================================================================================
+
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │ MERGE INTO Destino AS T                                                 │
+    │ USING Fuente AS S ON T.ID = S.ID                                       │
+    │ WHEN MATCHED THEN UPDATE SET T.Valor = S.Valor                         │
+    │ WHEN NOT MATCHED THEN INSERT (ID, Valor) VALUES (S.ID, S.Valor)        │
+    │                                                                         │
+    │ OUTPUT                                                                  │
+    │     $action AS Accion,           -- 'INSERT', 'UPDATE', 'DELETE'       │
+    │     INSERTED.ID AS NuevoID,                                            │
+    │     INSERTED.Valor AS NuevoValor,                                      │
+    │     DELETED.Valor AS ValorAnterior;                                    │
+    └─────────────────────────────────────────────────────────────────────────┘
+
+
+================================================================================
+ 11. THROTTLING (CONTROL DE VELOCIDAD)
+================================================================================
+
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │ -- Pausa fija entre batches                                            │
+    │ WAITFOR DELAY '00:00:01';  -- 1 segundo                                │
+    │                                                                         │
+    │ -- Límite de tiempo total                                              │
+    │ IF DATEDIFF(MINUTE, @Inicio, GETDATE()) >= @MaxMinutos                 │
+    │     BREAK;                                                             │
+    │                                                                         │
+    │ -- Horario permitido                                                   │
+    │ IF CAST(GETDATE() AS TIME) NOT BETWEEN '22:00' AND '06:00'            │
+    │     BREAK;                                                             │
+    └─────────────────────────────────────────────────────────────────────────┘
+
+
+================================================================================
+ 12. VALIDACIÓN DE DATOS EN LOTE
+================================================================================
+
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │ -- Identificar registros inválidos                                     │
+    │ SELECT *,                                                              │
+    │     CASE                                                               │
+    │         WHEN TRY_CONVERT(DATE, FechaStr) IS NULL THEN 'Fecha inválida' │
+    │         WHEN TRY_CONVERT(DECIMAL, MontoStr) IS NULL THEN 'Monto inválido'│
+    │         WHEN Monto <= 0 THEN 'Monto debe ser positivo'                 │
+    │         ELSE 'OK'                                                      │
+    │     END AS Estado                                                      │
+    │ FROM TablaStaging;                                                     │
+    │                                                                         │
+    │ -- Insertar solo válidos                                               │
+    │ INSERT INTO TablaDestino                                               │
+    │ SELECT * FROM TablaStaging                                             │
+    │ WHERE TRY_CONVERT(DATE, FechaStr) IS NOT NULL                         │
+    │   AND TRY_CONVERT(DECIMAL, MontoStr) IS NOT NULL                      │
+    │   AND TRY_CONVERT(DECIMAL, MontoStr) > 0;                             │
+    └─────────────────────────────────────────────────────────────────────────┘
+
+
+================================================================================
+ 13. MEJORES PRÁCTICAS
+================================================================================
+
+    HACER:
+    ┌──────────────────────────────────────────────────────────────────────────┐
+    │ ✓ Siempre usar batching para >10,000 registros                          │
+    │ ✓ Implementar logging de progreso                                        │
+    │ ✓ Usar TRY_CONVERT para datos externos/importados                       │
+    │ ✓ Agregar checkpoints para procesos largos                               │
+    │ ✓ Probar en ambiente de desarrollo primero                               │
+    │ ✓ Documentar tamaños de batch y tiempos esperados                       │
+    └──────────────────────────────────────────────────────────────────────────┘
+
+    EVITAR:
+    ┌──────────────────────────────────────────────────────────────────────────┐
+    │ ✗ DELETE/UPDATE sin WHERE en tablas grandes                              │
+    │ ✗ Batches demasiado grandes (>100,000)                                   │
+    │ ✗ Correr en horario pico sin throttling                                  │
+    │ ✗ Ignorar errores en procesos de batch                                   │
+    │ ✗ Sin forma de resumir si falla el proceso                               │
+    └──────────────────────────────────────────────────────────────────────────┘
+
+
+================================================================================
+ 14. SCRIPTS RÁPIDOS
+================================================================================
+
+    -- Contar registros a procesar
+    SELECT COUNT(*) FROM MiTabla WHERE FechaCreacion < DATEADD(YEAR, -1, GETDATE());
+
+    -- Estimar tiempo (basado en prueba de 1 batch)
+    -- Si 10,000 registros toman 5 segundos:
+    -- 1,000,000 registros ≈ 100 batches × 5 seg = ~8 minutos
+
+    -- Monitorear progreso
+    SELECT 
+        RegistrosProcesados,
+        DATEDIFF(MINUTE, FechaInicio, GETDATE()) AS MinutosTranscurridos,
+        RegistrosProcesados / NULLIF(DATEDIFF(MINUTE, FechaInicio, GETDATE()), 0) AS RegsPorMinuto
+    FROM CheckpointProceso;
+
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  RECUERDA: El batching no es opcional para operaciones masivas en            ║
+║  producción. Es la diferencia entre un proceso exitoso y una caída.          ║
+╚══════════════════════════════════════════════════════════════════════════════╝

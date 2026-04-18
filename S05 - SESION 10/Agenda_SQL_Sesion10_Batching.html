@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sesión 10: Batching y Operaciones Masivas - SQL Intermedio 2026</title>
+    <style>
+        :root {
+            --primary: #7c3aed;
+            --primary-dark: #5b21b6;
+            --secondary: #06b6d4;
+            --accent: #f59e0b;
+            --bg: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4c1d95 100%);
+            --card-bg: rgba(255, 255, 255, 0.95);
+            --text: #1e293b;
+            --text-light: #64748b;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            min-height: 100vh;
+            padding: 2rem;
+            color: var(--text);
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        header {
+            background: var(--card-bg);
+            border-radius: 20px;
+            padding: 2rem 3rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+        
+        .session-badge {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            padding: 0.5rem 1.5rem;
+            border-radius: 50px;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        
+        h1 {
+            font-size: 2.2rem;
+            color: var(--primary-dark);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        h1::before {
+            content: "📦";
+            font-size: 2rem;
+        }
+        
+        .meta-info {
+            display: flex;
+            gap: 2rem;
+            color: var(--text-light);
+            font-size: 0.95rem;
+        }
+        
+        .meta-info span {
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+        }
+        
+        .main-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 2rem;
+        }
+        
+        .card {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 1.8rem;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+        }
+        
+        .card h2 {
+            color: var(--primary-dark);
+            margin-bottom: 1.2rem;
+            padding-bottom: 0.8rem;
+            border-bottom: 2px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .agenda-timeline {
+            position: relative;
+            padding-left: 2rem;
+        }
+        
+        .agenda-timeline::before {
+            content: '';
+            position: absolute;
+            left: 6px;
+            top: 0;
+            bottom: 0;
+            width: 3px;
+            background: linear-gradient(to bottom, var(--primary), var(--secondary));
+            border-radius: 3px;
+        }
+        
+        .agenda-item {
+            position: relative;
+            padding: 1rem 0;
+            padding-left: 1rem;
+        }
+        
+        .agenda-item::before {
+            content: '';
+            position: absolute;
+            left: -24px;
+            top: 1.3rem;
+            width: 14px;
+            height: 14px;
+            background: var(--primary);
+            border-radius: 50%;
+            border: 3px solid white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+        
+        .agenda-item.break::before {
+            background: var(--accent);
+        }
+        
+        .agenda-time {
+            font-size: 0.85rem;
+            color: var(--primary);
+            font-weight: 600;
+            display: block;
+            margin-bottom: 0.3rem;
+        }
+        
+        .agenda-title {
+            font-weight: 600;
+            color: var(--text);
+            font-size: 1.05rem;
+        }
+        
+        .agenda-desc {
+            font-size: 0.9rem;
+            color: var(--text-light);
+            margin-top: 0.3rem;
+        }
+        
+        .objectives-list {
+            list-style: none;
+        }
+        
+        .objectives-list li {
+            padding: 0.7rem 0;
+            padding-left: 2rem;
+            position: relative;
+            border-bottom: 1px dashed #e2e8f0;
+        }
+        
+        .objectives-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .objectives-list li::before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: var(--primary);
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+        
+        .pattern-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        
+        .pattern-item {
+            background: linear-gradient(135deg, #f8fafc, #f1f5f9);
+            border-radius: 12px;
+            padding: 1.2rem;
+            border-left: 4px solid var(--primary);
+            transition: transform 0.2s;
+        }
+        
+        .pattern-item:hover {
+            transform: translateY(-3px);
+        }
+        
+        .pattern-item h4 {
+            color: var(--primary-dark);
+            margin-bottom: 0.5rem;
+            font-size: 0.95rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .pattern-item p {
+            font-size: 0.85rem;
+            color: var(--text-light);
+            line-height: 1.5;
+        }
+        
+        .code-box {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 1rem;
+            border-radius: 8px;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 0.8rem;
+            overflow-x: auto;
+            margin-top: 1rem;
+        }
+        
+        .code-box .keyword {
+            color: #c084fc;
+        }
+        
+        .code-box .function {
+            color: #22d3ee;
+        }
+        
+        .code-box .comment {
+            color: #6b7280;
+        }
+        
+        .comparison-table {
+            width: 100%;
+            margin-top: 1rem;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+        
+        .comparison-table th {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            padding: 0.8rem;
+            text-align: left;
+        }
+        
+        .comparison-table td {
+            padding: 0.7rem;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .comparison-table tr:nth-child(even) {
+            background: #f8fafc;
+        }
+        
+        .resources-list {
+            list-style: none;
+        }
+        
+        .resources-list li {
+            padding: 0.8rem;
+            margin: 0.5rem 0;
+            background: #f8fafc;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            transition: transform 0.2s;
+        }
+        
+        .resources-list li:hover {
+            transform: translateX(5px);
+        }
+        
+        .resources-list .icon {
+            width: 36px;
+            height: 36px;
+            background: var(--primary);
+            color: white;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+        }
+        
+        .batch-flow {
+            display: flex;
+            align-items: center;
+            justify-content: space-around;
+            margin: 1.5rem 0;
+            padding: 1rem;
+            background: linear-gradient(135deg, #faf5ff, #f3e8ff);
+            border-radius: 12px;
+        }
+        
+        .batch-step {
+            text-align: center;
+            padding: 0.5rem;
+        }
+        
+        .batch-step .number {
+            width: 40px;
+            height: 40px;
+            background: var(--primary);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            margin: 0 auto 0.5rem;
+        }
+        
+        .batch-step .label {
+            font-size: 0.8rem;
+            color: var(--text);
+        }
+        
+        .batch-arrow {
+            color: var(--primary);
+            font-size: 1.5rem;
+        }
+        
+        .warning-box {
+            background: linear-gradient(135deg, #fef3c7, #fde68a);
+            border-left: 4px solid var(--accent);
+            padding: 1rem;
+            border-radius: 8px;
+            margin-top: 1rem;
+        }
+        
+        .warning-box h4 {
+            color: #92400e;
+            margin-bottom: 0.5rem;
+        }
+        
+        .warning-box ul {
+            list-style: none;
+            font-size: 0.85rem;
+            color: #78350f;
+        }
+        
+        .warning-box li {
+            padding: 0.3rem 0;
+        }
+        
+        footer {
+            margin-top: 2rem;
+            text-align: center;
+            color: white;
+            opacity: 0.8;
+            font-size: 0.9rem;
+        }
+        
+        @media (max-width: 900px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            header {
+                flex-direction: column;
+                text-align: center;
+            }
+            
+            .pattern-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .batch-flow {
+                flex-direction: column;
+                gap: 1rem;
+            }
+            
+            .batch-arrow {
+                transform: rotate(90deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div>
+                <span class="session-badge">SEMANA 5 • SESIÓN 10</span>
+                <h1>Batching y Operaciones Masivas</h1>
+                <p style="color: var(--text-light); margin-top: 0.5rem;">
+                    Chunking, MERGE, TRY_CONVERT/TRY_PARSE, Checkpoints
+                </p>
+            </div>
+            <div class="meta-info">
+                <span>📅 Semana 5</span>
+                <span>⏱️ 2 horas</span>
+                <span>📊 Nivel: Intermedio-Avanzado</span>
+            </div>
+        </header>
+        
+        <div class="main-grid">
+            <div class="left-column">
+                <div class="card">
+                    <h2>📋 Agenda de la Sesión</h2>
+                    <div class="agenda-timeline">
+                        <div class="agenda-item">
+                            <span class="agenda-time">0:00 - 0:15</span>
+                            <div class="agenda-title">Problemas de Operaciones Masivas</div>
+                            <div class="agenda-desc">Bloqueos, log overflow, escalamiento de locks. Por qué batching es esencial.</div>
+                        </div>
+                        
+                        <div class="agenda-item">
+                            <span class="agenda-time">0:15 - 0:35</span>
+                            <div class="agenda-title">DELETE/UPDATE con Chunking</div>
+                            <div class="agenda-desc">Patrón TOP + WHILE. Control de lotes, logging de progreso, pausas opcionales.</div>
+                        </div>
+                        
+                        <div class="agenda-item">
+                            <span class="agenda-time">0:35 - 0:50</span>
+                            <div class="agenda-title">MERGE: Operaciones Combinadas</div>
+                            <div class="agenda-desc">Sintaxis completa: WHEN MATCHED, NOT MATCHED BY TARGET/SOURCE. OUTPUT clause.</div>
+                        </div>
+                        
+                        <div class="agenda-item break">
+                            <span class="agenda-time">0:50 - 1:00</span>
+                            <div class="agenda-title">☕ Receso</div>
+                        </div>
+                        
+                        <div class="agenda-item">
+                            <span class="agenda-time">1:00 - 1:20</span>
+                            <div class="agenda-title">TRY_CONVERT y TRY_CAST</div>
+                            <div class="agenda-desc">Conversiones seguras sin errores. Limpieza de datos sucios, validación en ETL.</div>
+                        </div>
+                        
+                        <div class="agenda-item">
+                            <span class="agenda-time">1:20 - 1:35</span>
+                            <div class="agenda-title">TRY_PARSE Multicultural</div>
+                            <div class="agenda-desc">Conversiones con cultura específica. Formatos de fecha y número por país.</div>
+                        </div>
+                        
+                        <div class="agenda-item">
+                            <span class="agenda-time">1:35 - 1:50</span>
+                            <div class="agenda-title">Checkpoints y Monitoreo</div>
+                            <div class="agenda-desc">Tablas de checkpoint para resumir procesos. Throttling, horarios permitidos.</div>
+                        </div>
+                        
+                        <div class="agenda-item">
+                            <span class="agenda-time">1:50 - 2:00</span>
+                            <div class="agenda-title">Caso: Purga Programada BancoDB</div>
+                            <div class="agenda-desc">SP de purga con control de tiempo, horarios, logging y checkpoints.</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card" style="margin-top: 2rem;">
+                    <h2>🔄 Flujo de Batching</h2>
+                    
+                    <div class="batch-flow">
+                        <div class="batch-step">
+                            <div class="number">1</div>
+                            <div class="label">Inicializar<br>variables</div>
+                        </div>
+                        <span class="batch-arrow">→</span>
+                        <div class="batch-step">
+                            <div class="number">2</div>
+                            <div class="label">Procesar<br>batch</div>
+                        </div>
+                        <span class="batch-arrow">→</span>
+                        <div class="batch-step">
+                            <div class="number">3</div>
+                            <div class="label">Guardar<br>checkpoint</div>
+                        </div>
+                        <span class="batch-arrow">→</span>
+                        <div class="batch-step">
+                            <div class="number">4</div>
+                            <div class="label">Verificar<br>condición</div>
+                        </div>
+                        <span class="batch-arrow">→</span>
+                        <div class="batch-step">
+                            <div class="number">5</div>
+                            <div class="label">Repetir o<br>finalizar</div>
+                        </div>
+                    </div>
+                    
+                    <div class="code-box">
+                        <span class="keyword">DECLARE</span> @BatchSize <span class="keyword">INT</span> = 10000;<br>
+                        <span class="keyword">DECLARE</span> @RowsAffected <span class="keyword">INT</span> = 1;<br><br>
+                        <span class="keyword">WHILE</span> @RowsAffected > 0<br>
+                        <span class="keyword">BEGIN</span><br>
+                        &nbsp;&nbsp;<span class="keyword">DELETE TOP</span> (@BatchSize) <span class="keyword">FROM</span> MiTabla<br>
+                        &nbsp;&nbsp;<span class="keyword">WHERE</span> Fecha < @FechaCorte;<br><br>
+                        &nbsp;&nbsp;<span class="keyword">SET</span> @RowsAffected = <span class="function">@@ROWCOUNT</span>;<br>
+                        <span class="keyword">END</span>
+                    </div>
+                </div>
+                
+                <div class="card" style="margin-top: 2rem;">
+                    <h2>⚡ TRY_CONVERT vs TRY_CAST vs TRY_PARSE</h2>
+                    <table class="comparison-table">
+                        <thead>
+                            <tr>
+                                <th>Función</th>
+                                <th>Uso Principal</th>
+                                <th>Ejemplo</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>TRY_CONVERT</strong></td>
+                                <td>Con estilo de formato</td>
+                                <td>TRY_CONVERT(DATE, '2024-01-15', 120)</td>
+                            </tr>
+                            <tr>
+                                <td><strong>TRY_CAST</strong></td>
+                                <td>Conversión simple</td>
+                                <td>TRY_CAST('100' AS INT)</td>
+                            </tr>
+                            <tr>
+                                <td><strong>TRY_PARSE</strong></td>
+                                <td>Cultura específica</td>
+                                <td>TRY_PARSE('15/01/2024' AS DATE USING 'es-ES')</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    
+                    <div class="warning-box">
+                        <h4>⚠️ Diferencia Clave</h4>
+                        <ul>
+                            <li>• CAST/CONVERT normal → <strong>ERROR</strong> si falla</li>
+                            <li>• TRY_* → <strong>NULL</strong> si falla (sin error)</li>
+                            <li>• Ideal para datos importados o usuarios</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="right-column">
+                <div class="card">
+                    <h2>🎯 Objetivos</h2>
+                    <ul class="objectives-list">
+                        <li>Entender por qué batching es esencial para operaciones masivas</li>
+                        <li>Implementar DELETE/UPDATE con chunking</li>
+                        <li>Dominar MERGE para sincronización de datos</li>
+                        <li>Usar TRY_CONVERT/CAST/PARSE para datos sucios</li>
+                        <li>Implementar checkpoints para procesos largos</li>
+                        <li>Diseñar procesos con throttling y horarios</li>
+                    </ul>
+                </div>
+                
+                <div class="card" style="margin-top: 1.5rem;">
+                    <h2>📐 Patrones Clave</h2>
+                    <div class="pattern-grid" style="grid-template-columns: 1fr;">
+                        <div class="pattern-item">
+                            <h4>🗑️ DELETE Chunking</h4>
+                            <p>DELETE TOP (@Size) en WHILE loop hasta @@ROWCOUNT = 0</p>
+                        </div>
+                        <div class="pattern-item">
+                            <h4>🔄 MERGE Upsert</h4>
+                            <p>INSERT si nuevo, UPDATE si existe, todo en una sentencia</p>
+                        </div>
+                        <div class="pattern-item">
+                            <h4>💾 Checkpoint</h4>
+                            <p>Guardar progreso para poder resumir si falla</p>
+                        </div>
+                        <div class="pattern-item">
+                            <h4>🧹 TRY_CONVERT</h4>
+                            <p>Conversión segura: NULL en vez de error</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card" style="margin-top: 1.5rem;">
+                    <h2>📁 Archivos de la Sesión</h2>
+                    <ul class="resources-list">
+                        <li>
+                            <span class="icon">📄</span>
+                            <div>
+                                <strong>1. Batching_Operaciones_Masivas.sql</strong>
+                                <div style="font-size: 0.8rem; color: var(--text-light);">Script principal con teoría y demos</div>
+                            </div>
+                        </li>
+                        <li>
+                            <span class="icon">✏️</span>
+                            <div>
+                                <strong>2. Ejercicios_Batching.sql</strong>
+                                <div style="font-size: 0.8rem; color: var(--text-light);">10 ejercicios prácticos + soluciones</div>
+                            </div>
+                        </li>
+                        <li>
+                            <span class="icon">📋</span>
+                            <div>
+                                <strong>CheatSheet_Batching.txt</strong>
+                                <div style="font-size: 0.8rem; color: var(--text-light);">Referencia rápida de patrones</div>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="card" style="margin-top: 1.5rem;">
+                    <h2>📊 Tamaños de Batch</h2>
+                    <table class="comparison-table">
+                        <thead>
+                            <tr>
+                                <th>Operación</th>
+                                <th>Batch Size</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>DELETE simple</td>
+                                <td>5,000 - 10,000</td>
+                            </tr>
+                            <tr>
+                                <td>UPDATE con growth</td>
+                                <td>2,000 - 5,000</td>
+                            </tr>
+                            <tr>
+                                <td>INSERT masivo</td>
+                                <td>10,000 - 50,000</td>
+                            </tr>
+                            <tr>
+                                <td>MERGE complejo</td>
+                                <td>1,000 - 5,000</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="card" style="margin-top: 1.5rem;">
+                    <h2>📅 Próxima Sesión</h2>
+                    <div style="padding: 1rem; background: #f8fafc; border-radius: 10px; text-align: center;">
+                        <div style="font-size: 0.85rem; color: var(--text-light);">SEMANA 6 • SESIÓN 11</div>
+                        <div style="font-size: 1.2rem; font-weight: 600; color: var(--primary-dark); margin: 0.5rem 0;">
+                            📊 Tablas Temporales y Variables
+                        </div>
+                        <div style="font-size: 0.85rem; color: var(--text-light);">
+                            #temp, @table, ##global, Scope, Performance
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <footer>
+            <p>SQL Server Intermedio 2026 • Sesión 10 de 16 • Batching y Operaciones Masivas</p>
+        </footer>
+    </div>
+</body>
+</html>
