@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sesión 15: Auditoría y Compliance - SQL Intermedio 2026</title>
+    <style>
+        :root {
+            --primary: #1a365d;
+            --secondary: #c53030;
+            --accent: #2f855a;
+            --warning: #d69e2e;
+            --background: #f7fafc;
+            --text: #2d3748;
+            --light-border: #e2e8f0;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, var(--primary) 0%, #2c5282 100%);
+            min-height: 100vh;
+            padding: 2rem;
+            color: var(--text);
+        }
+        
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+        
+        header {
+            background: white;
+            border-radius: 20px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 15px 40px rgba(0,0,0,0.2);
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 6px;
+            background: linear-gradient(90deg, var(--secondary), var(--warning), var(--accent));
+        }
+        
+        .session-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, var(--secondary), #e53e3e);
+            color: white;
+            padding: 0.5rem 1.5rem;
+            border-radius: 30px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            box-shadow: 0 4px 15px rgba(197, 48, 48, 0.4);
+        }
+        
+        h1 {
+            color: var(--primary);
+            font-size: 2.2rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .subtitle {
+            color: #718096;
+            font-size: 1.1rem;
+        }
+        
+        .meta-info {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin-top: 1.5rem;
+            flex-wrap: wrap;
+        }
+        
+        .meta-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #4a5568;
+            font-size: 0.95rem;
+        }
+        
+        .meta-item svg {
+            width: 20px;
+            height: 20px;
+            fill: var(--secondary);
+        }
+        
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+        
+        @media (max-width: 800px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 1.5rem;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+        }
+        
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            margin-bottom: 1.2rem;
+            padding-bottom: 0.8rem;
+            border-bottom: 2px solid var(--light-border);
+        }
+        
+        .card-icon {
+            width: 45px;
+            height: 45px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .card-icon svg {
+            width: 24px;
+            height: 24px;
+            fill: white;
+        }
+        
+        .card-icon.red { background: linear-gradient(135deg, #c53030, #e53e3e); }
+        .card-icon.green { background: linear-gradient(135deg, #2f855a, #38a169); }
+        .card-icon.blue { background: linear-gradient(135deg, #2b6cb0, #3182ce); }
+        .card-icon.purple { background: linear-gradient(135deg, #6b46c1, #805ad5); }
+        .card-icon.orange { background: linear-gradient(135deg, #c05621, #dd6b20); }
+        .card-icon.teal { background: linear-gradient(135deg, #285e61, #319795); }
+        
+        .card-title {
+            font-size: 1.2rem;
+            color: var(--primary);
+        }
+        
+        .objectives-list {
+            list-style: none;
+        }
+        
+        .objectives-list li {
+            padding: 0.7rem 0;
+            padding-left: 2rem;
+            position: relative;
+            border-bottom: 1px dashed var(--light-border);
+        }
+        
+        .objectives-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .objectives-list li::before {
+            content: '🔐';
+            position: absolute;
+            left: 0;
+            font-size: 1rem;
+        }
+        
+        .timeline {
+            position: relative;
+        }
+        
+        .timeline-item {
+            display: flex;
+            gap: 1rem;
+            padding-bottom: 1.2rem;
+            position: relative;
+        }
+        
+        .timeline-item:last-child {
+            padding-bottom: 0;
+        }
+        
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: 35px;
+            top: 35px;
+            bottom: 0;
+            width: 2px;
+            background: linear-gradient(to bottom, var(--secondary), var(--accent));
+        }
+        
+        .timeline-item:last-child::before {
+            display: none;
+        }
+        
+        .timeline-time {
+            min-width: 70px;
+            height: 35px;
+            background: linear-gradient(135deg, var(--primary), #2c5282);
+            color: white;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            font-weight: 600;
+            z-index: 1;
+        }
+        
+        .timeline-content {
+            flex: 1;
+            background: #f7fafc;
+            padding: 0.8rem 1rem;
+            border-radius: 10px;
+            border-left: 3px solid var(--secondary);
+        }
+        
+        .timeline-content h4 {
+            color: var(--primary);
+            font-size: 0.95rem;
+            margin-bottom: 0.3rem;
+        }
+        
+        .timeline-content p {
+            color: #718096;
+            font-size: 0.85rem;
+        }
+        
+        .timeline-item.break .timeline-time {
+            background: linear-gradient(135deg, #2f855a, #38a169);
+        }
+        
+        .timeline-item.break .timeline-content {
+            border-left-color: var(--accent);
+        }
+        
+        .timeline-item.practice .timeline-time {
+            background: linear-gradient(135deg, #c05621, #dd6b20);
+        }
+        
+        .timeline-item.practice .timeline-content {
+            border-left-color: #dd6b20;
+        }
+        
+        .full-width {
+            grid-column: 1 / -1;
+        }
+        
+        .methods-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 1rem;
+        }
+        
+        .method-card {
+            background: linear-gradient(135deg, #f7fafc, #edf2f7);
+            padding: 1rem;
+            border-radius: 10px;
+            text-align: center;
+            transition: transform 0.3s, box-shadow 0.3s;
+            border-top: 3px solid var(--secondary);
+        }
+        
+        .method-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+        
+        .method-card h4 {
+            color: var(--primary);
+            font-size: 0.95rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .method-card ul {
+            list-style: none;
+            font-size: 0.8rem;
+            color: #718096;
+        }
+        
+        .method-card ul li {
+            padding: 0.2rem 0;
+        }
+        
+        .method-card .badge {
+            display: inline-block;
+            padding: 0.2rem 0.5rem;
+            border-radius: 10px;
+            font-size: 0.7rem;
+            margin-top: 0.5rem;
+            font-weight: 600;
+        }
+        
+        .badge.native { background: #c6f6d5; color: #22543d; }
+        .badge.custom { background: #fed7d7; color: #742a2a; }
+        .badge.auto { background: #bee3f8; color: #2a4365; }
+        
+        .files-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1rem;
+        }
+        
+        .file-item {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem;
+            background: #f7fafc;
+            border-radius: 10px;
+            transition: all 0.3s;
+        }
+        
+        .file-item:hover {
+            background: #edf2f7;
+            transform: translateX(5px);
+        }
+        
+        .file-icon {
+            width: 45px;
+            height: 45px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.3rem;
+            flex-shrink: 0;
+        }
+        
+        .file-icon.sql { background: linear-gradient(135deg, #3182ce, #2b6cb0); color: white; }
+        .file-icon.txt { background: linear-gradient(135deg, #38a169, #2f855a); color: white; }
+        .file-icon.html { background: linear-gradient(135deg, #dd6b20, #c05621); color: white; }
+        
+        .file-info h4 {
+            color: var(--primary);
+            font-size: 0.95rem;
+        }
+        
+        .file-info p {
+            color: #718096;
+            font-size: 0.8rem;
+        }
+        
+        .compliance-box {
+            background: linear-gradient(to right, #feebc8, #fbd38d);
+            border-left: 4px solid #d69e2e;
+            padding: 1rem 1.5rem;
+            border-radius: 0 12px 12px 0;
+            margin-top: 1rem;
+        }
+        
+        .compliance-box h4 {
+            color: #744210;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .compliance-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        
+        .compliance-tag {
+            background: white;
+            padding: 0.3rem 0.8rem;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #744210;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        .next-session {
+            background: linear-gradient(135deg, var(--primary), #2c5282);
+            color: white;
+            text-align: center;
+            padding: 1.5rem;
+        }
+        
+        .next-session h3 {
+            margin-bottom: 0.5rem;
+            font-size: 1.1rem;
+        }
+        
+        .next-session p {
+            opacity: 0.9;
+            font-size: 0.95rem;
+        }
+        
+        .next-session .final-badge {
+            display: inline-block;
+            background: rgba(255,255,255,0.2);
+            padding: 0.3rem 0.8rem;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            margin-top: 0.5rem;
+        }
+        
+        footer {
+            text-align: center;
+            color: rgba(255,255,255,0.8);
+            margin-top: 2rem;
+            font-size: 0.9rem;
+        }
+        
+        footer a {
+            color: var(--warning);
+            text-decoration: none;
+        }
+        
+        .flow-diagram {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            padding: 1rem;
+            background: #f7fafc;
+            border-radius: 10px;
+            margin-top: 1rem;
+        }
+        
+        .flow-node {
+            background: linear-gradient(135deg, var(--primary), #2c5282);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+        
+        .flow-arrow {
+            color: var(--secondary);
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+        
+        .audit-questions {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: #f7fafc;
+            border-radius: 10px;
+        }
+        
+        .audit-questions h5 {
+            color: var(--primary);
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .audit-questions ul {
+            list-style: none;
+            font-size: 0.85rem;
+        }
+        
+        .audit-questions li {
+            padding: 0.3rem 0;
+            padding-left: 1.5rem;
+            position: relative;
+        }
+        
+        .audit-questions li::before {
+            content: '?';
+            position: absolute;
+            left: 0;
+            width: 18px;
+            height: 18px;
+            background: var(--secondary);
+            color: white;
+            border-radius: 50%;
+            font-size: 0.7rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <span class="session-badge">📅 SEMANA 8 • SESIÓN 15</span>
+            <h1>🔐 Auditoría y Compliance</h1>
+            <p class="subtitle">Trazabilidad completa y cumplimiento normativo en sistemas bancarios</p>
+            
+            <div class="meta-info">
+                <div class="meta-item">
+                    <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>
+                    Duración: 2 horas
+                </div>
+                <div class="meta-item">
+                    <svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>
+                    Nivel: Intermedio-Avanzado
+                </div>
+                <div class="meta-item">
+                    <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                    DBAs & Compliance Officers
+                </div>
+            </div>
+        </header>
+        
+        <div class="main-grid">
+            <!-- Objetivos -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon green">
+                        <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                    </div>
+                    <h3 class="card-title">Objetivos de Aprendizaje</h3>
+                </div>
+                <ul class="objectives-list">
+                    <li>Comprender estrategias de auditoría en SQL Server</li>
+                    <li>Implementar SQL Server Audit para compliance</li>
+                    <li>Crear triggers de auditoría personalizados</li>
+                    <li>Configurar Temporal Tables para historial</li>
+                    <li>Usar Change Data Capture (CDC)</li>
+                    <li>Detectar patrones de fraude bancario</li>
+                </ul>
+            </div>
+            
+            <!-- Timeline -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon blue">
+                        <svg viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>
+                    </div>
+                    <h3 class="card-title">Agenda de la Sesión</h3>
+                </div>
+                <div class="timeline">
+                    <div class="timeline-item">
+                        <span class="timeline-time">0:00</span>
+                        <div class="timeline-content">
+                            <h4>Fundamentos de Auditoría</h4>
+                            <p>Por qué auditar, normativas, métodos</p>
+                        </div>
+                    </div>
+                    <div class="timeline-item">
+                        <span class="timeline-time">0:20</span>
+                        <div class="timeline-content">
+                            <h4>SQL Server Audit</h4>
+                            <p>Server Audit, especificaciones, destinos</p>
+                        </div>
+                    </div>
+                    <div class="timeline-item">
+                        <span class="timeline-time">0:40</span>
+                        <div class="timeline-content">
+                            <h4>Triggers de Auditoría</h4>
+                            <p>inserted/deleted, captura JSON</p>
+                        </div>
+                    </div>
+                    <div class="timeline-item break">
+                        <span class="timeline-time">1:00</span>
+                        <div class="timeline-content">
+                            <h4>☕ Descanso</h4>
+                            <p>10 minutos</p>
+                        </div>
+                    </div>
+                    <div class="timeline-item">
+                        <span class="timeline-time">1:10</span>
+                        <div class="timeline-content">
+                            <h4>Temporal Tables</h4>
+                            <p>System-versioning, FOR SYSTEM_TIME</p>
+                        </div>
+                    </div>
+                    <div class="timeline-item">
+                        <span class="timeline-time">1:30</span>
+                        <div class="timeline-content">
+                            <h4>CDC y Detección de Fraude</h4>
+                            <p>Change Data Capture, patrones sospechosos</p>
+                        </div>
+                    </div>
+                    <div class="timeline-item practice">
+                        <span class="timeline-time">1:50</span>
+                        <div class="timeline-content">
+                            <h4>Cierre y Q&A</h4>
+                            <p>Resumen, compliance, preguntas</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Métodos de Auditoría -->
+            <div class="card full-width">
+                <div class="card-header">
+                    <div class="card-icon purple">
+                        <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14l-5-5 1.41-1.41L12 14.17l4.59-4.58L18 11l-6 6z"/></svg>
+                    </div>
+                    <h3 class="card-title">Métodos de Auditoría en SQL Server</h3>
+                </div>
+                <div class="methods-grid">
+                    <div class="method-card">
+                        <h4>🔍 SQL Server Audit</h4>
+                        <ul>
+                            <li>Compliance formal</li>
+                            <li>File/Event Log</li>
+                            <li>Nivel servidor/BD</li>
+                        </ul>
+                        <span class="badge native">NATIVO</span>
+                    </div>
+                    <div class="method-card">
+                        <h4>⚡ Triggers</h4>
+                        <ul>
+                            <li>Personalizable</li>
+                            <li>inserted/deleted</li>
+                            <li>Datos completos</li>
+                        </ul>
+                        <span class="badge custom">CUSTOM</span>
+                    </div>
+                    <div class="method-card">
+                        <h4>📅 Temporal Tables</h4>
+                        <ul>
+                            <li>Historial automático</li>
+                            <li>Point-in-time</li>
+                            <li>Sin código extra</li>
+                        </ul>
+                        <span class="badge auto">AUTOMÁTICO</span>
+                    </div>
+                    <div class="method-card">
+                        <h4>📊 CDC</h4>
+                        <ul>
+                            <li>Replicación/ETL</li>
+                            <li>Basado en Log</li>
+                            <li>Alto volumen</li>
+                        </ul>
+                        <span class="badge native">NATIVO</span>
+                    </div>
+                    <div class="method-card">
+                        <h4>🔄 Change Tracking</h4>
+                        <ul>
+                            <li>Sincronización</li>
+                            <li>Ligero</li>
+                            <li>Solo qué cambió</li>
+                        </ul>
+                        <span class="badge native">NATIVO</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Preguntas de Auditoría -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon red">
+                        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/></svg>
+                    </div>
+                    <h3 class="card-title">Preguntas Clave de Auditoría</h3>
+                </div>
+                <div class="audit-questions">
+                    <h5>Toda auditoría debe responder:</h5>
+                    <ul>
+                        <li>¿Quién realizó el cambio?</li>
+                        <li>¿Cuándo lo hizo?</li>
+                        <li>¿Desde dónde se conectó?</li>
+                        <li>¿Cuál era el valor anterior?</li>
+                        <li>¿Cuál es el valor nuevo?</li>
+                        <li>¿Qué aplicación usó?</li>
+                    </ul>
+                </div>
+                
+                <div class="compliance-box">
+                    <h4>⚠️ Normativas Bancarias</h4>
+                    <div class="compliance-tags">
+                        <span class="compliance-tag">PCI-DSS</span>
+                        <span class="compliance-tag">SOX</span>
+                        <span class="compliance-tag">GDPR</span>
+                        <span class="compliance-tag">LGPD</span>
+                        <span class="compliance-tag">Basel III</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Archivos de la Sesión -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon orange">
+                        <svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+                    </div>
+                    <h3 class="card-title">Archivos de la Sesión</h3>
+                </div>
+                <div class="files-list">
+                    <div class="file-item">
+                        <div class="file-icon sql">📄</div>
+                        <div class="file-info">
+                            <h4>1. Auditoria_Compliance.sql</h4>
+                            <p>Script principal completo</p>
+                        </div>
+                    </div>
+                    <div class="file-item">
+                        <div class="file-icon sql">📝</div>
+                        <div class="file-info">
+                            <h4>2. Ejercicios_Auditoria.sql</h4>
+                            <p>10 ejercicios con soluciones</p>
+                        </div>
+                    </div>
+                    <div class="file-item">
+                        <div class="file-icon txt">📋</div>
+                        <div class="file-info">
+                            <h4>CheatSheet_Auditoria.txt</h4>
+                            <p>Referencia rápida</p>
+                        </div>
+                    </div>
+                    <div class="file-item">
+                        <div class="file-icon html">🌐</div>
+                        <div class="file-info">
+                            <h4>Agenda_SQL_Sesion15.html</h4>
+                            <p>Este documento</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Flujo Temporal Tables -->
+            <div class="card full-width">
+                <div class="card-header">
+                    <div class="card-icon teal">
+                        <svg viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>
+                    </div>
+                    <h3 class="card-title">Consultas Temporales (FOR SYSTEM_TIME)</h3>
+                </div>
+                <div class="flow-diagram">
+                    <span class="flow-node">AS OF 'fecha'</span>
+                    <span class="flow-arrow">|</span>
+                    <span class="flow-node">ALL</span>
+                    <span class="flow-arrow">|</span>
+                    <span class="flow-node">BETWEEN</span>
+                    <span class="flow-arrow">|</span>
+                    <span class="flow-node">CONTAINED IN</span>
+                    <span class="flow-arrow">|</span>
+                    <span class="flow-node">FROM ... TO</span>
+                </div>
+            </div>
+            
+            <!-- Próxima Sesión -->
+            <div class="card full-width next-session">
+                <h3>📅 Próxima Sesión (16) - ÚLTIMA</h3>
+                <p>Workshop Final de Tuning — Caso práctico completo de optimización de un sistema bancario integrando todos los conceptos del curso</p>
+                <span class="final-badge">🎓 SESIÓN FINAL DEL CURSO</span>
+            </div>
+        </div>
+        
+        <footer>
+            <p>SQL Intermedio 2026 &bull; Semana 8 &bull; Sesión 15 de 16</p>
+            <p style="margin-top: 0.5rem;">Base de datos: BancoDB | Enfoque: Trazabilidad y cumplimiento normativo</p>
+        </footer>
+    </div>
+</body>
+</html>

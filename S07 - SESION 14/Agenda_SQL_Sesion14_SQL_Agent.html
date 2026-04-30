@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sesión 14: SQL Agent Jobs y Automatización - SQL Intermedio 2026</title>
+    <style>
+        :root {
+            --primary: #1e3a5f;
+            --secondary: #e67e22;
+            --accent: #2ecc71;
+            --warning: #e74c3c;
+            --background: #f8f9fa;
+            --text: #2c3e50;
+            --light-border: #dee2e6;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, var(--primary) 0%, #2c5282 100%);
+            min-height: 100vh;
+            padding: 2rem;
+            color: var(--text);
+        }
+        
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+        
+        header {
+            background: white;
+            border-radius: 20px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 15px 40px rgba(0,0,0,0.2);
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 6px;
+            background: linear-gradient(90deg, var(--secondary), var(--accent), var(--secondary));
+        }
+        
+        .session-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, var(--secondary), #f39c12);
+            color: white;
+            padding: 0.5rem 1.5rem;
+            border-radius: 30px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            box-shadow: 0 4px 15px rgba(230, 126, 34, 0.4);
+        }
+        
+        h1 {
+            color: var(--primary);
+            font-size: 2.2rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .subtitle {
+            color: #6c757d;
+            font-size: 1.1rem;
+        }
+        
+        .meta-info {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin-top: 1.5rem;
+            flex-wrap: wrap;
+        }
+        
+        .meta-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #495057;
+            font-size: 0.95rem;
+        }
+        
+        .meta-item svg {
+            width: 20px;
+            height: 20px;
+            fill: var(--secondary);
+        }
+        
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+        
+        @media (max-width: 800px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 1.5rem;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+        }
+        
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            margin-bottom: 1.2rem;
+            padding-bottom: 0.8rem;
+            border-bottom: 2px solid var(--light-border);
+        }
+        
+        .card-icon {
+            width: 45px;
+            height: 45px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .card-icon svg {
+            width: 24px;
+            height: 24px;
+            fill: white;
+        }
+        
+        .card-icon.orange { background: linear-gradient(135deg, #e67e22, #f39c12); }
+        .card-icon.green { background: linear-gradient(135deg, #2ecc71, #27ae60); }
+        .card-icon.blue { background: linear-gradient(135deg, #3498db, #2980b9); }
+        .card-icon.purple { background: linear-gradient(135deg, #9b59b6, #8e44ad); }
+        .card-icon.red { background: linear-gradient(135deg, #e74c3c, #c0392b); }
+        
+        .card-title {
+            font-size: 1.2rem;
+            color: var(--primary);
+        }
+        
+        .objectives-list {
+            list-style: none;
+        }
+        
+        .objectives-list li {
+            padding: 0.7rem 0;
+            padding-left: 2rem;
+            position: relative;
+            border-bottom: 1px dashed var(--light-border);
+        }
+        
+        .objectives-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .objectives-list li::before {
+            content: '▸';
+            position: absolute;
+            left: 0;
+            color: var(--accent);
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+        
+        .timeline {
+            position: relative;
+        }
+        
+        .timeline-item {
+            display: flex;
+            gap: 1rem;
+            padding-bottom: 1.2rem;
+            position: relative;
+        }
+        
+        .timeline-item:last-child {
+            padding-bottom: 0;
+        }
+        
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: 35px;
+            top: 35px;
+            bottom: 0;
+            width: 2px;
+            background: linear-gradient(to bottom, var(--secondary), var(--accent));
+        }
+        
+        .timeline-item:last-child::before {
+            display: none;
+        }
+        
+        .timeline-time {
+            min-width: 70px;
+            height: 35px;
+            background: linear-gradient(135deg, var(--primary), #2c5282);
+            color: white;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            font-weight: 600;
+            z-index: 1;
+        }
+        
+        .timeline-content {
+            flex: 1;
+            background: #f8f9fa;
+            padding: 0.8rem 1rem;
+            border-radius: 10px;
+            border-left: 3px solid var(--secondary);
+        }
+        
+        .timeline-content h4 {
+            color: var(--primary);
+            font-size: 0.95rem;
+            margin-bottom: 0.3rem;
+        }
+        
+        .timeline-content p {
+            color: #6c757d;
+            font-size: 0.85rem;
+        }
+        
+        .timeline-item.break .timeline-time {
+            background: linear-gradient(135deg, #2ecc71, #27ae60);
+        }
+        
+        .timeline-item.break .timeline-content {
+            border-left-color: var(--accent);
+        }
+        
+        .timeline-item.practice .timeline-time {
+            background: linear-gradient(135deg, #e67e22, #f39c12);
+        }
+        
+        .timeline-item.practice .timeline-content {
+            border-left-color: #e67e22;
+        }
+        
+        .full-width {
+            grid-column: 1 / -1;
+        }
+        
+        .topics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+        
+        .topic-card {
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            padding: 1rem;
+            border-radius: 10px;
+            text-align: center;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        
+        .topic-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+        
+        .topic-card h4 {
+            color: var(--primary);
+            font-size: 0.95rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .topic-card ul {
+            list-style: none;
+            font-size: 0.85rem;
+            color: #6c757d;
+        }
+        
+        .topic-card ul li {
+            padding: 0.2rem 0;
+        }
+        
+        .files-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1rem;
+        }
+        
+        .file-item {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem;
+            background: #f8f9fa;
+            border-radius: 10px;
+            transition: all 0.3s;
+        }
+        
+        .file-item:hover {
+            background: #e9ecef;
+            transform: translateX(5px);
+        }
+        
+        .file-icon {
+            width: 45px;
+            height: 45px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.3rem;
+            flex-shrink: 0;
+        }
+        
+        .file-icon.sql { background: linear-gradient(135deg, #3498db, #2980b9); color: white; }
+        .file-icon.txt { background: linear-gradient(135deg, #2ecc71, #27ae60); color: white; }
+        .file-icon.html { background: linear-gradient(135deg, #e67e22, #f39c12); color: white; }
+        
+        .file-info h4 {
+            color: var(--primary);
+            font-size: 0.95rem;
+        }
+        
+        .file-info p {
+            color: #6c757d;
+            font-size: 0.8rem;
+        }
+        
+        .concepts-flow {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            padding: 1rem;
+        }
+        
+        .concept-node {
+            background: linear-gradient(135deg, var(--primary), #2c5282);
+            color: white;
+            padding: 0.6rem 1.2rem;
+            border-radius: 25px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+        
+        .concept-arrow {
+            color: var(--secondary);
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+        
+        .key-point-box {
+            background: linear-gradient(to right, #fff3cd, #ffeeba);
+            border-left: 4px solid #ffc107;
+            padding: 1rem;
+            border-radius: 0 10px 10px 0;
+            margin-top: 1rem;
+        }
+        
+        .key-point-box h4 {
+            color: #856404;
+            margin-bottom: 0.5rem;
+        }
+        
+        .key-point-box p {
+            color: #856404;
+            font-size: 0.9rem;
+        }
+        
+        .freq-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+            font-size: 0.9rem;
+        }
+        
+        .freq-table th, .freq-table td {
+            padding: 0.6rem;
+            text-align: left;
+            border-bottom: 1px solid var(--light-border);
+        }
+        
+        .freq-table th {
+            background: var(--primary);
+            color: white;
+        }
+        
+        .freq-table tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .freq-table code {
+            background: #e9ecef;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.85rem;
+        }
+        
+        .next-session {
+            background: linear-gradient(135deg, var(--primary), #2c5282);
+            color: white;
+            text-align: center;
+            padding: 1.5rem;
+        }
+        
+        .next-session h3 {
+            margin-bottom: 0.5rem;
+            font-size: 1.1rem;
+        }
+        
+        .next-session p {
+            opacity: 0.9;
+            font-size: 0.95rem;
+        }
+        
+        footer {
+            text-align: center;
+            color: rgba(255,255,255,0.8);
+            margin-top: 2rem;
+            font-size: 0.9rem;
+        }
+        
+        footer a {
+            color: var(--secondary);
+            text-decoration: none;
+        }
+        
+        /* Animation for key procedures */
+        .proc-demo {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+        
+        .proc-item {
+            background: linear-gradient(135deg, #2c5282, var(--primary));
+            color: white;
+            padding: 0.4rem 0.8rem;
+            border-radius: 5px;
+            font-family: 'Consolas', monospace;
+            font-size: 0.8rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <span class="session-badge">📅 SEMANA 7 • SESIÓN 14</span>
+            <h1>⚡ SQL Agent Jobs y Automatización</h1>
+            <p class="subtitle">Automatiza tareas críticas del sistema bancario con SQL Server Agent</p>
+            
+            <div class="meta-info">
+                <div class="meta-item">
+                    <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>
+                    Duración: 2 horas
+                </div>
+                <div class="meta-item">
+                    <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
+                    Nivel: Intermedio-Avanzado
+                </div>
+                <div class="meta-item">
+                    <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                    DBAs & Desarrolladores Senior
+                </div>
+            </div>
+        </header>
+        
+        <div class="main-grid">
+            <!-- Objetivos -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon green">
+                        <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                    </div>
+                    <h3 class="card-title">Objetivos de Aprendizaje</h3>
+                </div>
+                <ul class="objectives-list">
+                    <li>Comprender la arquitectura de SQL Server Agent</li>
+                    <li>Crear Jobs con múltiples Steps y flujo de control</li>
+                    <li>Configurar Schedules para distintos escenarios</li>
+                    <li>Implementar Operators y Alerts para monitoreo</li>
+                    <li>Automatizar mantenimiento de bases bancarias</li>
+                </ul>
+            </div>
+            
+            <!-- Timeline -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon blue">
+                        <svg viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>
+                    </div>
+                    <h3 class="card-title">Agenda de la Sesión</h3>
+                </div>
+                <div class="timeline">
+                    <div class="timeline-item">
+                        <span class="timeline-time">0:00</span>
+                        <div class="timeline-content">
+                            <h4>SQL Server Agent Overview</h4>
+                            <p>Arquitectura, servicios y componentes</p>
+                        </div>
+                    </div>
+                    <div class="timeline-item">
+                        <span class="timeline-time">0:20</span>
+                        <div class="timeline-content">
+                            <h4>Jobs, Steps y Schedules</h4>
+                            <p>sp_add_job, sp_add_jobstep, freq_type</p>
+                        </div>
+                    </div>
+                    <div class="timeline-item practice">
+                        <span class="timeline-time">0:50</span>
+                        <div class="timeline-content">
+                            <h4>Ejercicio: Job de Respaldo</h4>
+                            <p>Crear job multi-step con schedules</p>
+                        </div>
+                    </div>
+                    <div class="timeline-item break">
+                        <span class="timeline-time">1:05</span>
+                        <div class="timeline-content">
+                            <h4>☕ Descanso</h4>
+                            <p>10 minutos</p>
+                        </div>
+                    </div>
+                    <div class="timeline-item">
+                        <span class="timeline-time">1:15</span>
+                        <div class="timeline-content">
+                            <h4>Operators y Alerts</h4>
+                            <p>Notificaciones y respuestas automáticas</p>
+                        </div>
+                    </div>
+                    <div class="timeline-item">
+                        <span class="timeline-time">1:35</span>
+                        <div class="timeline-content">
+                            <h4>Monitoreo de Jobs</h4>
+                            <p>Historia, troubleshooting, dashboard</p>
+                        </div>
+                    </div>
+                    <div class="timeline-item practice">
+                        <span class="timeline-time">1:50</span>
+                        <div class="timeline-content">
+                            <h4>Cierre y Q&A</h4>
+                            <p>Resumen y preguntas</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Temas Principales -->
+            <div class="card full-width">
+                <div class="card-header">
+                    <div class="card-icon purple">
+                        <svg viewBox="0 0 24 24"><path d="M12 3L1 9l11 6 9-4.91V17h2V9M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82z"/></svg>
+                    </div>
+                    <h3 class="card-title">Temas Principales</h3>
+                </div>
+                <div class="topics-grid">
+                    <div class="topic-card">
+                        <h4>🔧 SQL Agent</h4>
+                        <ul>
+                            <li>Servicio y permisos</li>
+                            <li>Arquitectura</li>
+                            <li>Base de datos msdb</li>
+                        </ul>
+                    </div>
+                    <div class="topic-card">
+                        <h4>📋 Jobs & Steps</h4>
+                        <ul>
+                            <li>sp_add_job</li>
+                            <li>sp_add_jobstep</li>
+                            <li>Flujo de control</li>
+                        </ul>
+                    </div>
+                    <div class="topic-card">
+                        <h4>⏰ Schedules</h4>
+                        <ul>
+                            <li>freq_type (1,4,8,16,32)</li>
+                            <li>freq_interval</li>
+                            <li>Subdivisión del día</li>
+                        </ul>
+                    </div>
+                    <div class="topic-card">
+                        <h4>👥 Operators</h4>
+                        <ul>
+                            <li>Crear operadores</li>
+                            <li>Database Mail</li>
+                            <li>Nivel de notificación</li>
+                        </ul>
+                    </div>
+                    <div class="topic-card">
+                        <h4>🚨 Alerts</h4>
+                        <ul>
+                            <li>Alerts por severidad</li>
+                            <li>Alerts por error ID</li>
+                            <li>Respuestas automáticas</li>
+                        </ul>
+                    </div>
+                    <div class="topic-card">
+                        <h4>📊 Monitoreo</h4>
+                        <ul>
+                            <li>sysjobhistory</li>
+                            <li>Jobs fallidos</li>
+                            <li>Próximas ejecuciones</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Flujo Conceptual -->
+            <div class="card full-width">
+                <div class="card-header">
+                    <div class="card-icon orange">
+                        <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14l-5-5 1.41-1.41L12 14.17l4.59-4.58L18 11l-6 6z"/></svg>
+                    </div>
+                    <h3 class="card-title">Flujo de Creación de Job Automatizado</h3>
+                </div>
+                <div class="concepts-flow">
+                    <span class="concept-node">sp_add_job</span>
+                    <span class="concept-arrow">→</span>
+                    <span class="concept-node">sp_add_jobstep</span>
+                    <span class="concept-arrow">→</span>
+                    <span class="concept-node">sp_add_jobschedule</span>
+                    <span class="concept-arrow">→</span>
+                    <span class="concept-node">sp_add_jobserver</span>
+                    <span class="concept-arrow">→</span>
+                    <span class="concept-node">sp_add_operator</span>
+                    <span class="concept-arrow">→</span>
+                    <span class="concept-node">✓ Job Listo</span>
+                </div>
+                <div class="key-point-box">
+                    <h4>⚠️ Punto Clave</h4>
+                    <p>Siempre agregar el job al servidor con <code>sp_add_jobserver</code> — sin esto el job existe pero no se ejecutará automáticamente.</p>
+                </div>
+            </div>
+            
+            <!-- Tabla de freq_type -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon blue">
+                        <svg viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>
+                    </div>
+                    <h3 class="card-title">Códigos freq_type</h3>
+                </div>
+                <table class="freq-table">
+                    <thead>
+                        <tr>
+                            <th>Código</th>
+                            <th>Frecuencia</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>1</code></td>
+                            <td>Una vez</td>
+                        </tr>
+                        <tr>
+                            <td><code>4</code></td>
+                            <td>Diario</td>
+                        </tr>
+                        <tr>
+                            <td><code>8</code></td>
+                            <td>Semanal (bitmap días)</td>
+                        </tr>
+                        <tr>
+                            <td><code>16</code></td>
+                            <td>Mensual (día específico)</td>
+                        </tr>
+                        <tr>
+                            <td><code>32</code></td>
+                            <td>Mensual relativo</td>
+                        </tr>
+                        <tr>
+                            <td><code>64</code></td>
+                            <td>Al iniciar Agent</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Archivos de la Sesión -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon red">
+                        <svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+                    </div>
+                    <h3 class="card-title">Archivos de la Sesión</h3>
+                </div>
+                <div class="files-list">
+                    <div class="file-item">
+                        <div class="file-icon sql">📄</div>
+                        <div class="file-info">
+                            <h4>1. SQL_Agent_Automatizacion.sql</h4>
+                            <p>Script principal con ejemplos completos</p>
+                        </div>
+                    </div>
+                    <div class="file-item">
+                        <div class="file-icon sql">📝</div>
+                        <div class="file-info">
+                            <h4>2. Ejercicios_SQL_Agent.sql</h4>
+                            <p>10 ejercicios prácticos con soluciones</p>
+                        </div>
+                    </div>
+                    <div class="file-item">
+                        <div class="file-icon txt">📋</div>
+                        <div class="file-info">
+                            <h4>CheatSheet_SQL_Agent.txt</h4>
+                            <p>Referencia rápida de comandos</p>
+                        </div>
+                    </div>
+                    <div class="file-item">
+                        <div class="file-icon html">🌐</div>
+                        <div class="file-info">
+                            <h4>Agenda_SQL_Sesion14.html</h4>
+                            <p>Este documento HTML</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Próxima Sesión -->
+            <div class="card full-width next-session">
+                <h3>📅 Próxima Sesión (15)</h3>
+                <p>Auditoría y Compliance — Triggers de auditoría, funciones temporales, Change Data Capture, historial de cambios y cumplimiento normativo bancario</p>
+            </div>
+        </div>
+        
+        <footer>
+            <p>SQL Intermedio 2026 &bull; Semana 7 &bull; Sesión 14 de 16</p>
+            <p style="margin-top: 0.5rem;">Base de datos: BancoDB | Enfoque: Automatización de mantenimiento bancario</p>
+        </footer>
+    </div>
+</body>
+</html>

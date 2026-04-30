@@ -1,0 +1,345 @@
+================================================================================
+                    CHEATSHEET - WORKSHOP FINAL DE TUNING
+                 🎓 Sesión 16 - SQL Intermedio - SESIÓN FINAL
+================================================================================
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                    METODOLOGÍA DE TUNING - 5 PASOS                           ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║                                                                              ║
+║   1. IDENTIFICAR  → Queries lentas (DMVs, Extended Events)                   ║
+║   2. ANALIZAR     → Plan de ejecución, estadísticas IO/TIME                  ║
+║   3. DIAGNOSTICAR → Scans, Lookups, Sorts costosos, Missing indexes          ║
+║   4. OPTIMIZAR    → Índices, refactorización, hints                          ║
+║   5. VALIDAR      → Comparar antes/después, monitorear                       ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+================================================================================
+                     COMANDOS DE DIAGNÓSTICO
+================================================================================
+
+▸ ACTIVAR ESTADÍSTICAS
+────────────────────────────────────────────────────
+
+  SET STATISTICS IO ON;      -- Lecturas lógicas/físicas
+  SET STATISTICS TIME ON;    -- Tiempo CPU y elapsed
+  SET STATISTICS PROFILE ON; -- Plan de ejecución en texto
+
+▸ PLAN DE EJECUCIÓN
+────────────────────────────────────────────────────
+
+  -- Estimado (no ejecuta)
+  SET SHOWPLAN_XML ON;
+  
+  -- Real (ejecuta query)
+  Ctrl+M en SSMS (Include Actual Execution Plan)
+
+▸ INTERPRETAR STATISTICS IO
+────────────────────────────────────────────────────
+
+  Scan count      Veces que se escaneó la tabla/índice
+  Logical reads   Páginas leídas de buffer pool (memoria)
+  Physical reads  Páginas leídas de disco
+  Read-ahead      Páginas pre-cargadas anticipadamente
+
+  OBJETIVO: Reducir logical reads
+
+================================================================================
+                     OPERADORES COSTOSOS EN PLANES
+================================================================================
+
+┌─────────────────────┬─────────────────────────────────────────────────────┐
+│ Operador            │ Indica / Solución                                   │
+├─────────────────────┼─────────────────────────────────────────────────────┤
+│ Table Scan          │ Sin índice útil → Crear índice                      │
+│ Clustered Index Scan│ Leyendo toda la tabla → Índice NC + WHERE           │
+│ Key Lookup          │ Columnas faltantes → INCLUDE en índice              │
+│ Hash Match          │ Posible falta de índice en JOIN                     │
+│ Sort                │ Sin ORDER BY indexado → Índice ordenado             │
+│ Parallelism         │ Query pesada → Puede ser normal o problema          │
+│ Index Spool         │ Optimizador crea índice temp → Crear índice real    │
+│ Table Spool         │ Materialización temporal → Revisar query            │
+└─────────────────────┴─────────────────────────────────────────────────────┘
+
+================================================================================
+                     TIPOS DE ÍNDICES Y CUÁNDO USAR
+================================================================================
+
+▸ CLUSTERED INDEX
+────────────────────────────────────────────────────
+
+  - Solo 1 por tabla (define orden físico)
+  - Ideal para: PK, columnas de rango (fechas)
+  - Evitar en: Columnas que cambian frecuentemente
+
+▸ NONCLUSTERED INDEX
+────────────────────────────────────────────────────
+
+  - Múltiples por tabla
+  - Ideal para: Filtros WHERE, JOINs, ORDER BY
+  - Usar INCLUDE para evitar Key Lookups
+
+▸ FILTERED INDEX
+────────────────────────────────────────────────────
+
+  CREATE INDEX IX_Name ON Table(Col) WHERE Estado = 'ACTIVO';
+  
+  - Ideal para: Subconjuntos pequeños consultados frecuentemente
+  - Más pequeño y eficiente que índice completo
+
+▸ COVERING INDEX (Cubriente)
+────────────────────────────────────────────────────
+
+  CREATE INDEX IX_Name ON Table(Col1) INCLUDE (Col2, Col3);
+  
+  - Contiene todas las columnas del SELECT
+  - Evita Key Lookup (acceso adicional a tabla)
+
+================================================================================
+                     PATRONES DE OPTIMIZACIÓN
+================================================================================
+
+▸ EVITAR FUNCIONES EN WHERE
+────────────────────────────────────────────────────
+
+  -- MAL (no usa índice)
+  WHERE YEAR(FechaTransaccion) = 2024
+  
+  -- BIEN (usa índice)
+  WHERE FechaTransaccion >= '2024-01-01' 
+    AND FechaTransaccion < '2025-01-01'
+
+▸ USAR EXISTS EN LUGAR DE IN (para subconsultas)
+────────────────────────────────────────────────────
+
+  -- Menos eficiente
+  WHERE ID IN (SELECT ID FROM OtraTabla WHERE ...)
+  
+  -- Más eficiente
+  WHERE EXISTS (SELECT 1 FROM OtraTabla o WHERE o.ID = t.ID AND ...)
+
+▸ EVITAR SELECT *
+────────────────────────────────────────────────────
+
+  -- MAL
+  SELECT * FROM Transacciones
+  
+  -- BIEN
+  SELECT ID, Monto, Fecha FROM Transacciones
+
+▸ CUIDADO CON OR EN WHERE
+────────────────────────────────────────────────────
+
+  -- Puede ser lento
+  WHERE Col1 = 'A' OR Col2 = 'B'
+  
+  -- Alternativa: UNION ALL
+  SELECT * FROM Tabla WHERE Col1 = 'A'
+  UNION ALL
+  SELECT * FROM Tabla WHERE Col2 = 'B' AND Col1 <> 'A'
+
+================================================================================
+                     PREVENCIÓN DE DEADLOCKS
+================================================================================
+
+▸ REGLA DE ORO
+────────────────────────────────────────────────────
+
+  Siempre acceder a recursos en el mismo orden
+  
+  -- Ejemplo: siempre menor ID primero
+  DECLARE @PrimerID INT = CASE WHEN @ID1 < @ID2 THEN @ID1 ELSE @ID2 END;
+  DECLARE @SegundoID INT = CASE WHEN @ID1 < @ID2 THEN @ID2 ELSE @ID1 END;
+
+▸ TÉCNICAS ADICIONALES
+────────────────────────────────────────────────────
+
+  1. Transacciones cortas
+  2. No interacción con usuario dentro de transacción
+  3. Usar nivel de aislamiento apropiado
+  4. UPDLOCK, HOLDLOCK al inicio para bloquear temprano
+  5. SET DEADLOCK_PRIORITY LOW en procesos no críticos
+
+================================================================================
+                     BATCHING PARA OPERACIONES MASIVAS
+================================================================================
+
+▸ PATRÓN RECOMENDADO
+────────────────────────────────────────────────────
+
+  DECLARE @BatchSize INT = 10000;
+  DECLARE @Affected INT = 1;
+  
+  WHILE @Affected > 0
+  BEGIN
+      BEGIN TRANSACTION;
+      
+      UPDATE TOP (@BatchSize) Tabla
+      SET Col = 'Valor'
+      WHERE Condicion;
+      
+      SET @Affected = @@ROWCOUNT;
+      
+      COMMIT TRANSACTION;
+      
+      -- Opcional: pequeña pausa
+      -- WAITFOR DELAY '00:00:00.100';
+  END
+
+▸ BENEFICIOS
+────────────────────────────────────────────────────
+
+  - Evita bloqueos largos
+  - Libera log de transacciones periódicamente
+  - Permite cancelar sin rollback masivo
+  - Reduce lock escalation
+
+================================================================================
+                     ELIMINAR CURSORES - ALTERNATIVAS
+================================================================================
+
+▸ SET-BASED ES SIEMPRE MEJOR
+────────────────────────────────────────────────────
+
+  -- CURSOR (lento)
+  DECLARE cur CURSOR FOR SELECT ...
+  WHILE @@FETCH_STATUS = 0
+      UPDATE ... WHERE Current of cur
+  
+  -- SET-BASED (rápido)
+  UPDATE Tabla
+  SET Col = CASE WHEN ... THEN ... ELSE ... END
+  WHERE Condicion;
+
+▸ ALTERNATIVAS A CURSOR
+────────────────────────────────────────────────────
+
+  1. CASE WHEN para lógica condicional
+  2. CTEs para procesamiento jerárquico
+  3. Window Functions para cálculos por grupo
+  4. CROSS APPLY para llamadas a funciones
+  5. Tablas temporales + JOINs
+
+================================================================================
+                     DMVS ÚTILES PARA TUNING
+================================================================================
+
+▸ QUERIES MÁS COSTOSAS
+────────────────────────────────────────────────────
+
+  SELECT TOP 20
+      qs.total_elapsed_time / qs.execution_count AS AvgTime,
+      qs.execution_count,
+      SUBSTRING(st.text, ...) AS Query
+  FROM sys.dm_exec_query_stats qs
+  CROSS APPLY sys.dm_exec_sql_text(qs.sql_handle) st
+  ORDER BY AvgTime DESC;
+
+▸ ÍNDICES FALTANTES
+────────────────────────────────────────────────────
+
+  SELECT 
+      migs.avg_user_impact,
+      mid.equality_columns,
+      mid.inequality_columns,
+      mid.included_columns
+  FROM sys.dm_db_missing_index_groups mig
+  JOIN sys.dm_db_missing_index_group_stats migs ON ...
+  JOIN sys.dm_db_missing_index_details mid ON ...;
+
+▸ ÍNDICES NO USADOS
+────────────────────────────────────────────────────
+
+  SELECT OBJECT_NAME(i.object_id), i.name,
+         ius.user_seeks, ius.user_scans, ius.user_lookups
+  FROM sys.indexes i
+  LEFT JOIN sys.dm_db_index_usage_stats ius ON ...
+  WHERE ius.user_seeks = 0 AND ius.user_scans = 0;
+
+▸ FRAGMENTACIÓN DE ÍNDICES
+────────────────────────────────────────────────────
+
+  SELECT OBJECT_NAME(ips.object_id), i.name,
+         ips.avg_fragmentation_in_percent
+  FROM sys.dm_db_index_physical_stats(...) ips
+  JOIN sys.indexes i ON ...
+  WHERE ips.avg_fragmentation_in_percent > 10;
+
+================================================================================
+                     WINDOW FUNCTIONS - RESUMEN
+================================================================================
+
+▸ RANKING
+────────────────────────────────────────────────────
+
+  ROW_NUMBER()  1,2,3,4,5 (siempre único)
+  RANK()        1,2,2,4,5 (empates comparten, salta)
+  DENSE_RANK()  1,2,2,3,4 (empates comparten, no salta)
+  NTILE(n)      Divide en n grupos iguales
+
+▸ AGREGACIÓN
+────────────────────────────────────────────────────
+
+  SUM() OVER()      Total o running total
+  AVG() OVER()      Promedio móvil
+  COUNT() OVER()    Conteo
+  MIN/MAX() OVER()  Mínimo/máximo en ventana
+
+▸ NAVEGACIÓN
+────────────────────────────────────────────────────
+
+  LAG(col, n)       Valor n filas atrás
+  LEAD(col, n)      Valor n filas adelante
+  FIRST_VALUE()     Primer valor de la ventana
+  LAST_VALUE()      Último valor de la ventana
+
+▸ FRAME CLAUSE
+────────────────────────────────────────────────────
+
+  ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW  -- Running total
+  ROWS BETWEEN 3 PRECEDING AND CURRENT ROW          -- Últimas 4 filas
+  ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING  -- Desde aquí al final
+
+================================================================================
+                     CHECKLIST DE TUNING
+================================================================================
+
+  □ Analizar plan de ejecución
+  □ Verificar estadísticas actualizadas
+  □ Buscar Table Scans innecesarios
+  □ Eliminar Key Lookups con INCLUDE
+  □ Verificar índices missing sugeridos
+  □ Eliminar cursores → SET-BASED
+  □ Implementar batching para operaciones masivas
+  □ Verificar funciones en WHERE
+  □ Comprobar tipos de datos compatibles en JOINs
+  □ Usar EXISTS en lugar de IN para subconsultas
+  □ Verificar el nivel de aislamiento apropiado
+  □ Documentar cambios y mejoras obtenidas
+
+================================================================================
+                     RESUMEN DEL CURSO
+================================================================================
+
+  Sesión 1:  Transacciones y Bloqueos
+  Sesión 2:  Manejo de Errores Profesional
+  Sesión 3:  Diseño y Performance
+  Sesión 4:  Índices Estratégicos
+  Sesión 5:  Procedimientos Almacenados
+  Sesión 6:  Funciones y Vistas
+  Sesión 7:  CTEs y Recursividad
+  Sesión 8:  Window Functions
+  Sesión 9:  Pivoting y Agregaciones
+  Sesión 10: Batching y Operaciones Masivas
+  Sesión 11: Tablas Temporales
+  Sesión 12: Cursores vs Set-Based
+  Sesión 13: SQL Dinámico Seguro
+  Sesión 14: SQL Agent Jobs
+  Sesión 15: Auditoría y Compliance
+  Sesión 16: Workshop Final de Tuning 🎓
+
+================================================================================
+     🎓 ¡FELICITACIONES POR COMPLETAR SQL INTERMEDIO 2026!
+              SQL Intermedio 2026 • Sesión 16 • CheatSheet
+================================================================================

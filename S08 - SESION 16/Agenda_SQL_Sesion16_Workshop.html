@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sesión 16: Workshop Final de Tuning 🎓 | SQL Intermedio 2026</title>
+    <style>
+        :root {
+            --primary: #1a5f2a;
+            --primary-light: #2e8b47;
+            --secondary: #ffd700;
+            --dark: #1a1a2e;
+            --light: #f8f9fa;
+            --accent: #20c997;
+            --warning: #ffc107;
+            --gradient-start: #1a5f2a;
+            --gradient-end: #2e8b47;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #0d2818 100%);
+            color: var(--light);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        /* Header Especial para Sesión Final */
+        header {
+            text-align: center;
+            padding: 50px 20px;
+            background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+            border-radius: 20px;
+            margin-bottom: 40px;
+            box-shadow: 0 20px 60px rgba(26, 95, 42, 0.5);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        header::before {
+            content: '🎓';
+            position: absolute;
+            font-size: 200px;
+            opacity: 0.1;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+        
+        .session-badge {
+            display: inline-block;
+            background: var(--secondary);
+            color: var(--dark);
+            padding: 12px 30px;
+            border-radius: 50px;
+            font-weight: bold;
+            font-size: 1.1em;
+            margin-bottom: 20px;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        
+        header h1 {
+            font-size: 3.2em;
+            margin-bottom: 15px;
+            text-shadow: 3px 3px 6px rgba(0,0,0,0.4);
+        }
+        
+        header p {
+            font-size: 1.4em;
+            opacity: 0.95;
+        }
+        
+        /* Celebration Banner */
+        .celebration-banner {
+            background: linear-gradient(90deg, var(--secondary), #ff6b6b, var(--secondary));
+            background-size: 200% auto;
+            animation: gradient 3s linear infinite;
+            color: var(--dark);
+            padding: 20px;
+            border-radius: 15px;
+            text-align: center;
+            margin-bottom: 30px;
+            font-weight: bold;
+            font-size: 1.3em;
+        }
+        
+        @keyframes gradient {
+            0% { background-position: 0% center; }
+            100% { background-position: 200% center; }
+        }
+        
+        /* Info Grid */
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+        
+        .info-card {
+            background: rgba(255,255,255,0.08);
+            padding: 25px;
+            border-radius: 15px;
+            text-align: center;
+            border: 2px solid var(--primary);
+            transition: all 0.3s ease;
+        }
+        
+        .info-card:hover {
+            transform: translateY(-5px);
+            border-color: var(--secondary);
+            box-shadow: 0 10px 30px rgba(255, 215, 0, 0.2);
+        }
+        
+        .info-card .icon {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .info-card h3 {
+            color: var(--secondary);
+            margin-bottom: 5px;
+        }
+        
+        /* Objetivos Especiales */
+        .objectives {
+            background: linear-gradient(135deg, rgba(26, 95, 42, 0.3), rgba(46, 139, 71, 0.2));
+            border-radius: 20px;
+            padding: 35px;
+            margin-bottom: 40px;
+            border: 2px solid var(--primary);
+        }
+        
+        .objectives h2 {
+            color: var(--secondary);
+            font-size: 1.8em;
+            margin-bottom: 25px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .objectives ul {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 15px;
+            list-style: none;
+        }
+        
+        .objectives li {
+            background: rgba(0,0,0,0.3);
+            padding: 15px 20px;
+            border-radius: 10px;
+            border-left: 4px solid var(--accent);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .objectives li::before {
+            content: '🏆';
+            font-size: 1.3em;
+        }
+        
+        /* Timeline del Workshop */
+        .timeline-section {
+            background: rgba(0,0,0,0.4);
+            border-radius: 20px;
+            padding: 35px;
+            margin-bottom: 40px;
+        }
+        
+        .timeline-section h2 {
+            color: var(--secondary);
+            font-size: 1.8em;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        
+        .timeline {
+            position: relative;
+        }
+        
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 30px;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: linear-gradient(to bottom, var(--primary), var(--secondary), var(--accent));
+            border-radius: 2px;
+        }
+        
+        .timeline-item {
+            position: relative;
+            padding-left: 80px;
+            margin-bottom: 30px;
+        }
+        
+        .timeline-item:last-child {
+            margin-bottom: 0;
+        }
+        
+        .timeline-marker {
+            position: absolute;
+            left: 15px;
+            width: 34px;
+            height: 34px;
+            background: var(--primary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1em;
+            border: 3px solid var(--secondary);
+        }
+        
+        .timeline-content {
+            background: rgba(255,255,255,0.05);
+            border-radius: 15px;
+            padding: 25px;
+            border: 1px solid rgba(255,255,255,0.1);
+            transition: all 0.3s ease;
+        }
+        
+        .timeline-content:hover {
+            background: rgba(255,255,255,0.08);
+            border-color: var(--primary);
+        }
+        
+        .timeline-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        
+        .timeline-title {
+            font-size: 1.4em;
+            color: var(--accent);
+        }
+        
+        .timeline-duration {
+            background: var(--primary);
+            padding: 6px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+        
+        .timeline-topics {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .topic-tag {
+            background: rgba(46, 139, 71, 0.3);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            border: 1px solid var(--primary-light);
+        }
+        
+        /* Skills Review Section */
+        .skills-review {
+            background: linear-gradient(135deg, rgba(32, 201, 151, 0.15), rgba(26, 95, 42, 0.15));
+            border-radius: 20px;
+            padding: 35px;
+            margin-bottom: 40px;
+            border: 2px solid var(--accent);
+        }
+        
+        .skills-review h2 {
+            color: var(--secondary);
+            font-size: 1.8em;
+            margin-bottom: 25px;
+            text-align: center;
+        }
+        
+        .skills-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+        }
+        
+        .skill-item {
+            background: rgba(0,0,0,0.3);
+            padding: 18px;
+            border-radius: 12px;
+            text-align: center;
+            border: 1px solid rgba(255,255,255,0.1);
+            transition: all 0.3s ease;
+        }
+        
+        .skill-item:hover {
+            transform: scale(1.05);
+            border-color: var(--secondary);
+        }
+        
+        .skill-item .session-num {
+            background: var(--primary);
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8em;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        
+        .skill-item .skill-name {
+            font-size: 0.95em;
+            color: var(--light);
+        }
+        
+        /* Recursos */
+        .resources {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+        
+        .resource-card {
+            background: rgba(255,255,255,0.05);
+            border-radius: 15px;
+            padding: 25px;
+            border: 2px solid transparent;
+            transition: all 0.3s ease;
+        }
+        
+        .resource-card:hover {
+            border-color: var(--primary);
+            transform: translateY(-3px);
+        }
+        
+        .resource-card h3 {
+            color: var(--secondary);
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .resource-card ul {
+            list-style: none;
+        }
+        
+        .resource-card li {
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .resource-card li:last-child {
+            border-bottom: none;
+        }
+        
+        .resource-card li::before {
+            content: '✓';
+            color: var(--accent);
+            font-weight: bold;
+        }
+        
+        /* Evaluación Final */
+        .evaluation {
+            background: linear-gradient(135deg, rgba(255, 215, 0, 0.1), rgba(255, 107, 107, 0.1));
+            border-radius: 20px;
+            padding: 35px;
+            margin-bottom: 40px;
+            border: 2px solid var(--warning);
+        }
+        
+        .evaluation h2 {
+            color: var(--secondary);
+            font-size: 1.8em;
+            margin-bottom: 25px;
+            text-align: center;
+        }
+        
+        .eval-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+        
+        .eval-item {
+            background: rgba(0,0,0,0.3);
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+        }
+        
+        .eval-item .percentage {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: var(--secondary);
+        }
+        
+        .eval-item .label {
+            font-size: 1.1em;
+            margin-top: 5px;
+        }
+        
+        /* Certificación */
+        .certification {
+            background: linear-gradient(135deg, var(--primary), var(--primary-light));
+            border-radius: 20px;
+            padding: 50px;
+            text-align: center;
+            margin-bottom: 40px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .certification::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+            opacity: 0.5;
+        }
+        
+        .certification-content {
+            position: relative;
+            z-index: 1;
+        }
+        
+        .certification h2 {
+            color: var(--secondary);
+            font-size: 2.2em;
+            margin-bottom: 20px;
+        }
+        
+        .certification p {
+            font-size: 1.2em;
+            max-width: 600px;
+            margin: 0 auto 25px;
+            opacity: 0.95;
+        }
+        
+        .cert-badge {
+            display: inline-block;
+            background: var(--secondary);
+            color: var(--dark);
+            padding: 15px 40px;
+            border-radius: 50px;
+            font-size: 1.3em;
+            font-weight: bold;
+            margin-top: 15px;
+        }
+        
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 30px;
+            color: rgba(255,255,255,0.7);
+            border-top: 1px solid rgba(255,255,255,0.1);
+            margin-top: 20px;
+        }
+        
+        footer .course-complete {
+            font-size: 1.3em;
+            color: var(--secondary);
+            margin-bottom: 10px;
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            header h1 {
+                font-size: 2.2em;
+            }
+            
+            .timeline::before {
+                left: 20px;
+            }
+            
+            .timeline-item {
+                padding-left: 60px;
+            }
+            
+            .timeline-marker {
+                left: 5px;
+                width: 30px;
+                height: 30px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="session-badge">🎓 SESIÓN FINAL 16 de 16</div>
+            <h1>Workshop Final de Tuning</h1>
+            <p>Integración de todos los conceptos • Optimización en escenarios reales</p>
+        </header>
+        
+        <div class="celebration-banner">
+            🎉 ¡FELICITACIONES! Has llegado a la sesión final del curso SQL Intermedio 2026 🎉
+        </div>
+        
+        <div class="info-grid">
+            <div class="info-card">
+                <div class="icon">⏱️</div>
+                <h3>Duración</h3>
+                <p>2 horas 30 minutos</p>
+            </div>
+            <div class="info-card">
+                <div class="icon">🔧</div>
+                <h3>Formato</h3>
+                <p>Workshop Práctico</p>
+            </div>
+            <div class="info-card">
+                <div class="icon">📊</div>
+                <h3>BD Práctica</h3>
+                <p>BancoDB Workshop</p>
+            </div>
+            <div class="info-card">
+                <div class="icon">🏆</div>
+                <h3>Resultado</h3>
+                <p>Certificación</p>
+            </div>
+        </div>
+        
+        <section class="objectives">
+            <h2>🎯 Objetivos del Workshop Final</h2>
+            <ul>
+                <li>Aplicar metodología completa de tuning en escenarios reales</li>
+                <li>Integrar conceptos de las 15 sesiones anteriores</li>
+                <li>Resolver problemas de performance con enfoque sistemático</li>
+                <li>Optimizar queries complejas mediante indexación estratégica</li>
+                <li>Prevenir deadlocks con técnicas de ordenamiento de recursos</li>
+                <li>Implementar operaciones masivas con batching eficiente</li>
+                <li>Demostrar dominio de SQL Server intermedio</li>
+            </ul>
+        </section>
+        
+        <section class="skills-review">
+            <h2>📚 Habilidades del Curso Aplicadas</h2>
+            <div class="skills-grid">
+                <div class="skill-item">
+                    <div class="session-num">1</div>
+                    <div class="skill-name">Transacciones</div>
+                </div>
+                <div class="skill-item">
+                    <div class="session-num">2</div>
+                    <div class="skill-name">Manejo Errores</div>
+                </div>
+                <div class="skill-item">
+                    <div class="session-num">3</div>
+                    <div class="skill-name">Performance</div>
+                </div>
+                <div class="skill-item">
+                    <div class="session-num">4</div>
+                    <div class="skill-name">Índices</div>
+                </div>
+                <div class="skill-item">
+                    <div class="session-num">5</div>
+                    <div class="skill-name">Stored Procedures</div>
+                </div>
+                <div class="skill-item">
+                    <div class="session-num">6</div>
+                    <div class="skill-name">Funciones/Vistas</div>
+                </div>
+                <div class="skill-item">
+                    <div class="session-num">7</div>
+                    <div class="skill-name">CTEs</div>
+                </div>
+                <div class="skill-item">
+                    <div class="session-num">8</div>
+                    <div class="skill-name">Window Functions</div>
+                </div>
+                <div class="skill-item">
+                    <div class="session-num">9</div>
+                    <div class="skill-name">Pivoting</div>
+                </div>
+                <div class="skill-item">
+                    <div class="session-num">10</div>
+                    <div class="skill-name">Batching</div>
+                </div>
+                <div class="skill-item">
+                    <div class="session-num">11</div>
+                    <div class="skill-name">Tablas Temp</div>
+                </div>
+                <div class="skill-item">
+                    <div class="session-num">12</div>
+                    <div class="skill-name">Set-Based</div>
+                </div>
+                <div class="skill-item">
+                    <div class="session-num">13</div>
+                    <div class="skill-name">SQL Dinámico</div>
+                </div>
+                <div class="skill-item">
+                    <div class="session-num">14</div>
+                    <div class="skill-name">SQL Agent</div>
+                </div>
+                <div class="skill-item">
+                    <div class="session-num">15</div>
+                    <div class="skill-name">Auditoría</div>
+                </div>
+            </div>
+        </section>
+        
+        <section class="timeline-section">
+            <h2>🗓️ Agenda del Workshop</h2>
+            
+            <div class="timeline">
+                <div class="timeline-item">
+                    <div class="timeline-marker">🔍</div>
+                    <div class="timeline-content">
+                        <div class="timeline-header">
+                            <span class="timeline-title">Fase 1: Diagnóstico</span>
+                            <span class="timeline-duration">35 min</span>
+                        </div>
+                        <p>Análisis del escenario problemático, identificación de queries lentas y comprensión del modelo de datos bancario.</p>
+                        <div class="timeline-topics">
+                            <span class="topic-tag">Setup entorno</span>
+                            <span class="topic-tag">STATISTICS IO/TIME</span>
+                            <span class="topic-tag">Execution Plans</span>
+                            <span class="topic-tag">DMVs diagnóstico</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-marker">📊</div>
+                    <div class="timeline-content">
+                        <div class="timeline-header">
+                            <span class="timeline-title">Fase 2: Indexación Estratégica</span>
+                            <span class="timeline-duration">30 min</span>
+                        </div>
+                        <p>Resolución de problemas de performance mediante creación de índices covering, filtered y composite.</p>
+                        <div class="timeline-topics">
+                            <span class="topic-tag">Missing indexes</span>
+                            <span class="topic-tag">Covering index</span>
+                            <span class="topic-tag">INCLUDE columns</span>
+                            <span class="topic-tag">Key Lookup elimination</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-marker">🔄</div>
+                    <div class="timeline-content">
+                        <div class="timeline-header">
+                            <span class="timeline-title">Fase 3: Refactorización</span>
+                            <span class="timeline-duration">40 min</span>
+                        </div>
+                        <p>Eliminación de cursores, implementación de batching y prevención de deadlocks en operaciones concurrentes.</p>
+                        <div class="timeline-topics">
+                            <span class="topic-tag">Set-Based</span>
+                            <span class="topic-tag">Batching patterns</span>
+                            <span class="topic-tag">Deadlock prevention</span>
+                            <span class="topic-tag">TRY-CATCH</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-marker">✅</div>
+                    <div class="timeline-content">
+                        <div class="timeline-header">
+                            <span class="timeline-title">Fase 4: Validación</span>
+                            <span class="timeline-duration">25 min</span>
+                        </div>
+                        <p>Comparación de métricas antes/después, documentación de mejoras y establecimiento de baselines.</p>
+                        <div class="timeline-topics">
+                            <span class="topic-tag">Comparación métricas</span>
+                            <span class="topic-tag">Documentación</span>
+                            <span class="topic-tag">Monitoring setup</span>
+                            <span class="topic-tag">Best practices</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-marker">🏆</div>
+                    <div class="timeline-content">
+                        <div class="timeline-header">
+                            <span class="timeline-title">Fase 5: Ejercicios Integración</span>
+                            <span class="timeline-duration">20 min</span>
+                        </div>
+                        <p>Ejercicios individuales que integran todos los conceptos del curso en escenarios bancarios reales.</p>
+                        <div class="timeline-topics">
+                            <span class="topic-tag">10 ejercicios</span>
+                            <span class="topic-tag">Todos los temas</span>
+                            <span class="topic-tag">Escenarios reales</span>
+                            <span class="topic-tag">Auto-evaluación</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <div class="resources">
+            <div class="resource-card">
+                <h3>📁 Scripts del Workshop</h3>
+                <ul>
+                    <li>1. Workshop_Final_Tuning.sql</li>
+                    <li>2. Ejercicios_Workshop_Tuning.sql</li>
+                    <li>CheatSheet_Workshop_Tuning.txt</li>
+                    <li>Modelo BancoDB Workshop</li>
+                </ul>
+            </div>
+            
+            <div class="resource-card">
+                <h3>🛠️ Herramientas Requeridas</h3>
+                <ul>
+                    <li>SQL Server 2019+</li>
+                    <li>SSMS con Execution Plans</li>
+                    <li>Scripts de las 15 sesiones</li>
+                    <li>CheatSheets del curso</li>
+                </ul>
+            </div>
+            
+            <div class="resource-card">
+                <h3>📋 Problemas del Workshop</h3>
+                <ul>
+                    <li>Reporte mensual lento (Table Scan)</li>
+                    <li>Deadlocks en transferencias</li>
+                    <li>Cierre de lotes ineficiente</li>
+                    <li>Consulta de saldos lenta</li>
+                    <li>Jobs de mantenimiento fallando</li>
+                </ul>
+            </div>
+        </div>
+        
+        <section class="evaluation">
+            <h2>📊 Evaluación Final del Curso</h2>
+            <div class="eval-grid">
+                <div class="eval-item">
+                    <div class="percentage">30%</div>
+                    <div class="label">Participación en Workshop</div>
+                </div>
+                <div class="eval-item">
+                    <div class="percentage">40%</div>
+                    <div class="label">Ejercicios Resueltos</div>
+                </div>
+                <div class="eval-item">
+                    <div class="percentage">30%</div>
+                    <div class="label">Documentación de Optimización</div>
+                </div>
+            </div>
+        </section>
+        
+        <section class="certification">
+            <div class="certification-content">
+                <h2>🎓 Certificación de Completitud</h2>
+                <p>Al finalizar este workshop y completar los ejercicios satisfactoriamente, habrás demostrado dominio de SQL Server a nivel intermedio, incluyendo optimización de queries, diseño de índices, manejo de transacciones y automatización.</p>
+                <div class="cert-badge">SQL Server Intermedio 2026 ✓</div>
+            </div>
+        </section>
+        
+        <footer>
+            <div class="course-complete">🎉 ¡CURSO COMPLETO! 🎉</div>
+            <p>SQL Intermedio 2026 • 16 Sesiones • 8 Semanas • Senior Banking Focus</p>
+            <p style="margin-top: 10px; font-size: 0.9em;">
+                Has completado exitosamente todo el programa de SQL Intermedio.<br>
+                ¡Felicitaciones por tu dedicación y esfuerzo!
+            </p>
+        </footer>
+    </div>
+</body>
+</html>

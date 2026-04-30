@@ -1,0 +1,359 @@
+================================================================================
+                    CHEATSHEET - AUDITORÍA Y COMPLIANCE
+                        Sesión 15 - SQL Intermedio
+================================================================================
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                    MÉTODOS DE AUDITORÍA EN SQL SERVER                        ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║                                                                              ║
+║   ┌─────────────────────┬────────────────────┬───────────────────┐          ║
+║   │ Método              │ Uso Principal      │ Complejidad       │          ║
+║   ├─────────────────────┼────────────────────┼───────────────────┤          ║
+║   │ SQL Server Audit    │ Compliance formal  │ Media             │          ║
+║   │ Triggers            │ Personalizado      │ Alta              │          ║
+║   │ Temporal Tables     │ Historial datos    │ Baja              │          ║
+║   │ CDC                 │ Replicación/ETL    │ Media-Alta        │          ║
+║   │ Change Tracking     │ Sincronización     │ Baja              │          ║
+║   └─────────────────────┴────────────────────┴───────────────────┘          ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+================================================================================
+                     SQL SERVER AUDIT (NATIVO)
+================================================================================
+
+▸ ARQUITECTURA
+────────────────────────────────────────────────────
+
+  Server Audit (destino) → Audit Specification → Audit Actions
+       │
+       ├── FILE (más común)
+       ├── APPLICATION_LOG
+       └── SECURITY_LOG
+
+▸ CREAR SERVER AUDIT
+────────────────────────────────────────────────────
+
+  CREATE SERVER AUDIT AuditName
+  TO FILE (
+      FILEPATH = 'C:\SQLAudit\',
+      MAXSIZE = 100 MB,
+      MAX_ROLLOVER_FILES = 10
+  )
+  WITH (
+      QUEUE_DELAY = 1000,
+      ON_FAILURE = CONTINUE
+  );
+
+  ALTER SERVER AUDIT AuditName WITH (STATE = ON);
+
+▸ SERVER AUDIT SPECIFICATION
+────────────────────────────────────────────────────
+
+  CREATE SERVER AUDIT SPECIFICATION SpecName
+  FOR SERVER AUDIT AuditName
+  ADD (FAILED_LOGIN_GROUP),
+  ADD (SUCCESSFUL_LOGIN_GROUP),
+  ADD (SERVER_PERMISSION_CHANGE_GROUP);
+
+  ALTER SERVER AUDIT SPECIFICATION SpecName WITH (STATE = ON);
+
+▸ DATABASE AUDIT SPECIFICATION
+────────────────────────────────────────────────────
+
+  USE MiDB;
+  CREATE DATABASE AUDIT SPECIFICATION SpecName
+  FOR SERVER AUDIT AuditName
+  ADD (SELECT, INSERT, UPDATE, DELETE ON dbo.TablaX BY public),
+  ADD (DATABASE_PERMISSION_CHANGE_GROUP);
+
+  ALTER DATABASE AUDIT SPECIFICATION SpecName WITH (STATE = ON);
+
+▸ CONSULTAR LOGS DE AUDITORÍA
+────────────────────────────────────────────────────
+
+  SELECT event_time, action_id, statement, 
+         server_principal_name, database_name
+  FROM sys.fn_get_audit_file('C:\SQLAudit\*.sqlaudit', NULL, NULL);
+
+================================================================================
+                     TRIGGERS DE AUDITORÍA
+================================================================================
+
+▸ ESTRUCTURA BÁSICA
+────────────────────────────────────────────────────
+
+  CREATE OR ALTER TRIGGER TR_Tabla_Auditoria
+  ON dbo.MiTabla
+  AFTER INSERT, UPDATE, DELETE
+  AS
+  BEGIN
+      SET NOCOUNT ON;
+      
+      -- Determinar tipo de operación
+      DECLARE @TipoOp CHAR(1);
+      IF EXISTS(SELECT 1 FROM inserted) AND NOT EXISTS(SELECT 1 FROM deleted)
+          SET @TipoOp = 'I';
+      ELSE IF EXISTS(SELECT 1 FROM inserted) AND EXISTS(SELECT 1 FROM deleted)
+          SET @TipoOp = 'U';
+      ELSE
+          SET @TipoOp = 'D';
+      
+      -- Registrar en tabla de auditoría usando inserted/deleted
+  END;
+
+▸ TABLAS VIRTUALES DEL TRIGGER
+────────────────────────────────────────────────────
+
+  inserted   Contiene filas nuevas (INSERT y UPDATE)
+  deleted    Contiene filas anteriores (UPDATE y DELETE)
+
+  INSERT: inserted = nuevos datos, deleted = vacío
+  UPDATE: inserted = nuevos datos, deleted = datos anteriores
+  DELETE: inserted = vacío, deleted = datos eliminados
+
+▸ CAPTURAR DATOS COMO JSON
+────────────────────────────────────────────────────
+
+  -- Datos anteriores
+  SELECT (SELECT * FROM deleted FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)
+  
+  -- Datos nuevos
+  SELECT (SELECT * FROM inserted FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)
+
+▸ FUNCIONES ÚTILES EN TRIGGERS
+────────────────────────────────────────────────────
+
+  SYSTEM_USER      Usuario de SQL Server
+  SUSER_SNAME()    Login name
+  USER_NAME()      Usuario de base de datos
+  HOST_NAME()      Nombre del host cliente
+  APP_NAME()       Nombre de la aplicación
+  SYSDATETIME()    Fecha/hora precisa
+  ORIGINAL_LOGIN() Login original (sin impersonation)
+
+================================================================================
+                     TEMPORAL TABLES (SYSTEM-VERSIONED)
+================================================================================
+
+▸ CREAR TABLA TEMPORAL
+────────────────────────────────────────────────────
+
+  CREATE TABLE dbo.MiTabla (
+      ID INT PRIMARY KEY,
+      Columna1 VARCHAR(100),
+      Columna2 DECIMAL(18,2),
+      
+      -- Columnas requeridas
+      ValidoDesde DATETIME2 GENERATED ALWAYS AS ROW START NOT NULL,
+      ValidoHasta DATETIME2 GENERATED ALWAYS AS ROW END NOT NULL,
+      
+      PERIOD FOR SYSTEM_TIME (ValidoDesde, ValidoHasta)
+  )
+  WITH (
+      SYSTEM_VERSIONING = ON (
+          HISTORY_TABLE = dbo.MiTabla_History,
+          HISTORY_RETENTION_PERIOD = 2 YEARS
+      )
+  );
+
+▸ CONSULTAS TEMPORALES (FOR SYSTEM_TIME)
+────────────────────────────────────────────────────
+
+  -- Estado actual
+  SELECT * FROM MiTabla;
+
+  -- Estado en un momento específico
+  SELECT * FROM MiTabla
+  FOR SYSTEM_TIME AS OF '2024-01-15 10:30:00';
+
+  -- Todo el historial
+  SELECT * FROM MiTabla
+  FOR SYSTEM_TIME ALL;
+
+  -- Cambios entre dos fechas
+  SELECT * FROM MiTabla
+  FOR SYSTEM_TIME BETWEEN @Inicio AND @Fin;
+
+  -- Versiones contenidas en rango
+  SELECT * FROM MiTabla
+  FOR SYSTEM_TIME CONTAINED IN (@Inicio, @Fin);
+
+  -- Versiones desde un punto hasta otro
+  SELECT * FROM MiTabla
+  FOR SYSTEM_TIME FROM @Inicio TO @Fin;
+
+▸ DESHABILITAR VERSIONADO (para mantenimiento)
+────────────────────────────────────────────────────
+
+  ALTER TABLE dbo.MiTabla SET (SYSTEM_VERSIONING = OFF);
+  -- Realizar mantenimiento...
+  ALTER TABLE dbo.MiTabla SET (
+      SYSTEM_VERSIONING = ON (HISTORY_TABLE = dbo.MiTabla_History)
+  );
+
+================================================================================
+                     CHANGE DATA CAPTURE (CDC)
+================================================================================
+
+▸ HABILITAR CDC
+────────────────────────────────────────────────────
+
+  -- A nivel de base de datos
+  EXEC sys.sp_cdc_enable_db;
+
+  -- A nivel de tabla
+  EXEC sys.sp_cdc_enable_table
+      @source_schema = 'dbo',
+      @source_name = 'MiTabla',
+      @role_name = NULL,
+      @capture_instance = 'dbo_MiTabla',
+      @supports_net_changes = 1;
+
+▸ CONSULTAR CAMBIOS CDC
+────────────────────────────────────────────────────
+
+  -- Obtener rango de LSN
+  DECLARE @from_lsn BINARY(10) = sys.fn_cdc_get_min_lsn('dbo_MiTabla');
+  DECLARE @to_lsn BINARY(10) = sys.fn_cdc_get_max_lsn();
+
+  -- Todos los cambios
+  SELECT * FROM cdc.fn_cdc_get_all_changes_dbo_MiTabla(
+      @from_lsn, @to_lsn, 'all'
+  );
+
+  -- Cambios netos (resultado final)
+  SELECT * FROM cdc.fn_cdc_get_net_changes_dbo_MiTabla(
+      @from_lsn, @to_lsn, 'all'
+  );
+
+▸ COLUMNA __$operation EN CDC
+────────────────────────────────────────────────────
+
+  1 = DELETE
+  2 = INSERT
+  3 = UPDATE (valores anteriores)
+  4 = UPDATE (valores nuevos)
+
+▸ DESHABILITAR CDC
+────────────────────────────────────────────────────
+
+  -- A nivel de tabla
+  EXEC sys.sp_cdc_disable_table
+      @source_schema = 'dbo',
+      @source_name = 'MiTabla',
+      @capture_instance = 'dbo_MiTabla';
+
+  -- A nivel de BD
+  EXEC sys.sp_cdc_disable_db;
+
+================================================================================
+                     TABLA DE AUDITORÍA RECOMENDADA
+================================================================================
+
+  CREATE TABLE Auditoria.AUD_NombreTabla (
+      AuditID          BIGINT IDENTITY(1,1) PRIMARY KEY,
+      TipoOperacion    CHAR(1) NOT NULL,        -- I, U, D
+      ClaveRegistro    INT NOT NULL,            -- PK del registro
+      DatosAnteriores  NVARCHAR(MAX),           -- JSON
+      DatosNuevos      NVARCHAR(MAX),           -- JSON
+      UsuarioDB        NVARCHAR(128) DEFAULT SYSTEM_USER,
+      UsuarioApp       NVARCHAR(128),           -- Desde aplicación
+      FechaHora        DATETIME2 DEFAULT SYSDATETIME(),
+      NombreHost       NVARCHAR(128) DEFAULT HOST_NAME(),
+      NombreApp        NVARCHAR(128) DEFAULT APP_NAME(),
+      DireccionIP      VARCHAR(48),
+      
+      CONSTRAINT CK_TipoOp CHECK (TipoOperacion IN ('I','U','D'))
+  );
+
+================================================================================
+                     DETECCIÓN DE FRAUDE - PATRONES
+================================================================================
+
+  ✓ Alta frecuencia      Múltiples transacciones en segundos
+  ✓ Monto inusual        > 3 desviaciones estándar
+  ✓ Fuera de horario     Antes 6AM o después 10PM
+  ✓ Viaje imposible      Ubicaciones distantes en poco tiempo
+  ✓ Dispositivo nuevo    Primer uso de dispositivo
+  ✓ IP sospechosa        Cambio de país/región repentino
+
+================================================================================
+                     COMPLIANCE BANCARIO - NORMATIVAS
+================================================================================
+
+  PCI-DSS          Datos de tarjetas de crédito
+  SOX              Sarbanes-Oxley (controles financieros)
+  GDPR             Protección de datos personales
+  LGPD             Ley brasileña de datos
+  Basel III        Regulación bancaria internacional
+
+  REQUISITOS COMUNES:
+  • Quién modificó los datos
+  • Cuándo se modificaron
+  • Qué valores tenía antes
+  • Desde dónde se conectó
+  • Retención mínima (típicamente 7 años)
+
+================================================================================
+                     CONSULTAS DE AUDITORÍA COMUNES
+================================================================================
+
+▸ CAMBIOS EN PERÍODO
+────────────────────────────────────────────────────
+
+  SELECT * FROM Auditoria.AUD_Tabla
+  WHERE FechaHora BETWEEN @Inicio AND @Fin
+  ORDER BY FechaHora DESC;
+
+▸ ACTIVIDAD POR USUARIO
+────────────────────────────────────────────────────
+
+  SELECT UsuarioDB, COUNT(*) AS Total,
+         SUM(CASE WHEN TipoOperacion='I' THEN 1 ELSE 0 END) AS Inserts,
+         SUM(CASE WHEN TipoOperacion='U' THEN 1 ELSE 0 END) AS Updates,
+         SUM(CASE WHEN TipoOperacion='D' THEN 1 ELSE 0 END) AS Deletes
+  FROM Auditoria.AUD_Tabla
+  GROUP BY UsuarioDB;
+
+▸ FUERA DE HORARIO LABORAL
+────────────────────────────────────────────────────
+
+  SELECT * FROM Auditoria.AUD_Tabla
+  WHERE DATEPART(HOUR, FechaHora) < 8 
+     OR DATEPART(HOUR, FechaHora) >= 18;
+
+▸ HISTORIAL DE UN REGISTRO ESPECÍFICO
+────────────────────────────────────────────────────
+
+  SELECT * FROM Auditoria.AUD_Tabla
+  WHERE ClaveRegistro = @ID
+  ORDER BY FechaHora;
+
+================================================================================
+                     MEJORES PRÁCTICAS
+================================================================================
+
+  ✓ Separar esquema        Usar esquema 'Auditoria' dedicado
+  ✓ Índices adecuados      En FechaHora y claves principales
+  ✓ Retención automática   Job de SQL Agent para limpieza
+  ✓ Archivado histórico    Mover a tablas de archivo
+  ✓ No auditar todo        Solo tablas sensibles/críticas
+  ✓ JSON para datos        Flexible y consultable
+  ✓ Documentar políticas   Runbook de compliance
+  ✓ Probar restauración    Verificar que se puede recuperar
+
+================================================================================
+                     VISTAS ÚTILES DEL SISTEMA
+================================================================================
+
+  sys.server_audits                  Auditorías de servidor
+  sys.server_audit_specifications    Especificaciones de servidor
+  sys.database_audit_specifications  Especificaciones de BD
+  sys.dm_audit_class_type_map        Mapeo de tipos de auditoría
+  sys.fn_get_audit_file()            Leer archivos de auditoría
+
+================================================================================
+              SQL Intermedio 2026 • Sesión 15 • CheatSheet
+================================================================================

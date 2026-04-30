@@ -1,0 +1,392 @@
+================================================================================
+                    CHEATSHEET - SQL AGENT JOBS Y AUTOMATIZACIÓN
+                        Sesión 14 - SQL Intermedio
+================================================================================
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                    ARQUITECTURA SQL SERVER AGENT                             ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║                                                                              ║
+║   SQL Server Agent Service                                                   ║
+║   │                                                                          ║
+║   ├── Jobs (Trabajos automatizados)                                          ║
+║   │   ├── Steps (Pasos a ejecutar)                                           ║
+║   │   └── Schedules (Horarios de ejecución)                                  ║
+║   │                                                                          ║
+║   ├── Operators (Destinatarios de notificaciones)                            ║
+║   │                                                                          ║
+║   ├── Alerts (Respuestas automáticas a eventos)                              ║
+║   │                                                                          ║
+║   └── Proxies (Credenciales alternativas)                                    ║
+║                                                                              ║
+║   Base de datos: msdb                                                        ║
+║   Tablas: sysjobs, sysjobsteps, sysjobschedules, sysoperators, etc.         ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+================================================================================
+                     PROCEDIMIENTOS PRINCIPALES
+================================================================================
+
+▸ GESTIÓN DE JOBS
+────────────────────────────────────────────────────
+
+  sp_add_job              Crear nuevo job
+  sp_update_job           Modificar job existente
+  sp_delete_job           Eliminar job
+  sp_start_job            Ejecutar manualmente
+  sp_stop_job             Detener ejecución
+  sp_help_job             Ver información del job
+
+▸ GESTIÓN DE STEPS
+────────────────────────────────────────────────────
+
+  sp_add_jobstep          Agregar paso
+  sp_update_jobstep       Modificar paso
+  sp_delete_jobstep       Eliminar paso
+
+▸ GESTIÓN DE SCHEDULES
+────────────────────────────────────────────────────
+
+  sp_add_schedule         Crear schedule reutilizable
+  sp_add_jobschedule      Agregar schedule a job
+  sp_attach_schedule      Adjuntar schedule existente
+  sp_delete_schedule      Eliminar schedule
+
+▸ GESTIÓN DE OPERATORS
+────────────────────────────────────────────────────
+
+  sp_add_operator         Crear operador
+  sp_update_operator      Modificar operador
+  sp_delete_operator      Eliminar operador
+
+▸ GESTIÓN DE ALERTAS
+────────────────────────────────────────────────────
+
+  sp_add_alert            Crear alerta
+  sp_add_notification     Asignar notificación
+  sp_delete_alert         Eliminar alerta
+
+================================================================================
+                     CREACIÓN DE JOB COMPLETO
+================================================================================
+
+  -- PASO 1: Crear el Job
+  EXEC msdb.dbo.sp_add_job
+      @job_name = N'MiJob',
+      @enabled = 1,
+      @description = N'Descripción del job',
+      @category_name = N'Database Maintenance',
+      @notify_level_eventlog = 2,    -- 2=On failure
+      @notify_level_email = 2,
+      @notify_email_operator_name = N'DBA_Team';
+
+  -- PASO 2: Agregar Steps
+  EXEC msdb.dbo.sp_add_jobstep
+      @job_name = N'MiJob',
+      @step_name = N'Paso1',
+      @step_id = 1,
+      @subsystem = N'TSQL',
+      @command = N'SELECT 1',
+      @database_name = N'MiDB',
+      @retry_attempts = 2,
+      @retry_interval = 5,
+      @on_success_action = 1,    -- Ver tabla abajo
+      @on_fail_action = 2;
+
+  -- PASO 3: Agregar Schedule
+  EXEC msdb.dbo.sp_add_jobschedule
+      @job_name = N'MiJob',
+      @name = N'Diario_Medianoche',
+      @freq_type = 4,            -- Ver tabla abajo
+      @freq_interval = 1,
+      @active_start_time = 0;
+
+  -- PASO 4: Asignar al servidor
+  EXEC msdb.dbo.sp_add_jobserver
+      @job_name = N'MiJob',
+      @server_name = N'(LOCAL)';
+
+================================================================================
+                     CÓDIGOS DE SCHEDULE (freq_type)
+================================================================================
+
+┌────────────────┬──────────────────────────────────────────────────────────────┐
+│ freq_type      │ Descripción                                                  │
+├────────────────┼──────────────────────────────────────────────────────────────┤
+│ 1              │ Una vez                                                      │
+│ 4              │ Diario                                                       │
+│ 8              │ Semanal                                                      │
+│ 16             │ Mensual (día específico del mes)                             │
+│ 32             │ Mensual relativo (ej: primer lunes del mes)                  │
+│ 64             │ Al iniciar SQL Server Agent                                  │
+│ 128            │ Cuando CPU está idle                                         │
+└────────────────┴──────────────────────────────────────────────────────────────┘
+
+================================================================================
+                     CÓDIGOS DE freq_interval
+================================================================================
+
+▸ PARA freq_type = 4 (Diario)
+  @freq_interval = 1    → Cada 1 día
+  @freq_interval = 2    → Cada 2 días
+
+▸ PARA freq_type = 8 (Semanal) - Bitmap de días
+  Domingo    = 1
+  Lunes      = 2
+  Martes     = 4
+  Miércoles  = 8
+  Jueves     = 16
+  Viernes    = 32
+  Sábado     = 64
+
+  Ejemplo: Lun+Mie+Vie = 2+8+32 = 42
+  Ejemplo: Lun-Vie     = 2+4+8+16+32 = 62
+
+▸ PARA freq_type = 16 (Mensual día)
+  @freq_interval = 1-31  → Día del mes
+
+▸ PARA freq_type = 32 (Mensual relativo)
+  @freq_interval = 1-7   → Día de la semana (1=Dom...7=Sab)
+  @freq_relative_interval = 1 (Primero), 2 (Segundo), 4 (Tercero),
+                            8 (Cuarto), 16 (Último)
+
+================================================================================
+                     CÓDIGOS DE SUBDIVISIÓN DEL DÍA
+================================================================================
+
+┌────────────────────┬─────────────────────────────────────────────────────────┐
+│ freq_subday_type   │ Descripción                                             │
+├────────────────────┼─────────────────────────────────────────────────────────┤
+│ 1                  │ A hora específica                                       │
+│ 2                  │ Cada X segundos (freq_subday_interval = segundos)       │
+│ 4                  │ Cada X minutos (freq_subday_interval = minutos)         │
+│ 8                  │ Cada X horas (freq_subday_interval = horas)             │
+└────────────────────┴─────────────────────────────────────────────────────────┘
+
+================================================================================
+                     CÓDIGOS DE ACCIÓN (success/fail)
+================================================================================
+
+┌────────────────────┬─────────────────────────────────────────────────────────┐
+│ Código             │ Acción                                                  │
+├────────────────────┼─────────────────────────────────────────────────────────┤
+│ 1                  │ Quit with success (terminar exitosamente)               │
+│ 2                  │ Quit with failure (terminar con error)                  │
+│ 3                  │ Go to next step (ir al siguiente paso)                  │
+│ 4                  │ Go to step ID (ir a paso específico)                    │
+└────────────────────┴─────────────────────────────────────────────────────────┘
+
+================================================================================
+                     EJEMPLOS DE SCHEDULES COMUNES
+================================================================================
+
+▸ DIARIO A MEDIANOCHE
+────────────────────────────────────────────────────
+
+  @freq_type = 4,
+  @freq_interval = 1,
+  @active_start_time = 0        -- 00:00:00
+
+▸ CADA 30 MINUTOS, LUN-VIE, 8AM-6PM
+────────────────────────────────────────────────────
+
+  @freq_type = 8,
+  @freq_interval = 62,          -- Lun a Vie
+  @freq_subday_type = 4,        -- Cada X minutos
+  @freq_subday_interval = 30,
+  @active_start_time = 80000,   -- 08:00
+  @active_end_time = 180000     -- 18:00
+
+▸ SEMANAL: DOMINGOS A LAS 3 AM
+────────────────────────────────────────────────────
+
+  @freq_type = 8,
+  @freq_interval = 1,           -- Domingo
+  @freq_recurrence_factor = 1,  -- Cada 1 semana
+  @active_start_time = 30000    -- 03:00
+
+▸ MENSUAL: PRIMER DOMINGO, 4 AM
+────────────────────────────────────────────────────
+
+  @freq_type = 32,
+  @freq_interval = 1,           -- Domingo
+  @freq_relative_interval = 1,  -- Primero
+  @freq_recurrence_factor = 1,  -- Cada 1 mes
+  @active_start_time = 40000    -- 04:00
+
+▸ MENSUAL: DÍA 1 A LAS 2 AM
+────────────────────────────────────────────────────
+
+  @freq_type = 16,
+  @freq_interval = 1,           -- Día 1 del mes
+  @freq_recurrence_factor = 1,
+  @active_start_time = 20000    -- 02:00
+
+================================================================================
+                     FORMATO DE HORA
+================================================================================
+
+  active_start_time / active_end_time → Formato HHMMSS
+
+  0        = 00:00:00 (medianoche)
+  80000    = 08:00:00
+  123000   = 12:30:00
+  180000   = 18:00:00
+  235959   = 23:59:59
+
+================================================================================
+                     CONSULTAS DE MONITOREO
+================================================================================
+
+▸ VER JOBS EN EJECUCIÓN
+────────────────────────────────────────────────────
+
+  SELECT j.name, ja.start_execution_date
+  FROM msdb.dbo.sysjobactivity ja
+  JOIN msdb.dbo.sysjobs j ON ja.job_id = j.job_id
+  WHERE ja.start_execution_date IS NOT NULL
+    AND ja.stop_execution_date IS NULL;
+
+▸ HISTORIAL DE EJECUCIONES
+────────────────────────────────────────────────────
+
+  SELECT j.name, 
+         h.run_status,
+         msdb.dbo.agent_datetime(h.run_date, h.run_time) AS Fecha
+  FROM msdb.dbo.sysjobhistory h
+  JOIN msdb.dbo.sysjobs j ON h.job_id = j.job_id
+  WHERE h.step_id = 0  -- Solo resultado del job
+  ORDER BY h.run_date DESC;
+
+▸ PRÓXIMAS EJECUCIONES
+────────────────────────────────────────────────────
+
+  SELECT j.name, 
+         msdb.dbo.agent_datetime(js.next_run_date, js.next_run_time) AS Proxima
+  FROM msdb.dbo.sysjobs j
+  JOIN msdb.dbo.sysjobschedules js ON j.job_id = js.job_id
+  WHERE js.next_run_date > 0;
+
+▸ JOBS FALLIDOS EN ÚLTIMAS 24H
+────────────────────────────────────────────────────
+
+  SELECT j.name, COUNT(*) AS Fallos
+  FROM msdb.dbo.sysjobhistory h
+  JOIN msdb.dbo.sysjobs j ON h.job_id = j.job_id
+  WHERE h.run_status = 0
+    AND h.step_id = 0
+    AND msdb.dbo.agent_datetime(h.run_date, h.run_time) > DATEADD(HOUR, -24, GETDATE())
+  GROUP BY j.name;
+
+================================================================================
+                     CÓDIGOS DE run_status
+================================================================================
+
+  0 = Failed (Falló)
+  1 = Succeeded (Éxito)
+  2 = Retry (Reintentando)
+  3 = Canceled (Cancelado)
+  4 = In Progress (En progreso)
+
+================================================================================
+                     OPERADORES Y ALERTAS
+================================================================================
+
+▸ CREAR OPERATOR
+────────────────────────────────────────────────────
+
+  EXEC msdb.dbo.sp_add_operator
+      @name = N'DBA_Team',
+      @enabled = 1,
+      @email_address = N'dba@empresa.com';
+
+▸ CREAR ALERTA POR SEVERIDAD
+────────────────────────────────────────────────────
+
+  EXEC msdb.dbo.sp_add_alert
+      @name = N'Error_Critico',
+      @severity = 17,           -- 17-25 son críticos
+      @enabled = 1,
+      @notification_message = N'Error crítico detectado';
+
+  EXEC msdb.dbo.sp_add_notification
+      @alert_name = N'Error_Critico',
+      @operator_name = N'DBA_Team',
+      @notification_method = 1;  -- 1=Email
+
+▸ CREAR ALERTA POR ERROR ESPECÍFICO
+────────────────────────────────────────────────────
+
+  EXEC msdb.dbo.sp_add_alert
+      @name = N'Log_Lleno',
+      @message_id = 9002,       -- Error de log lleno
+      @enabled = 1;
+
+================================================================================
+                     FLUJO DE CONTROL EN STEPS
+================================================================================
+
+  ┌─────────────────────────────────────────────────────────────────┐
+  │                                                                 │
+  │   Step 1 ─────┬── SUCCESS ──► Step 2 ──► Step 3 ──► FINISH OK  │
+  │               │                                                 │
+  │               └── FAIL ──────► Step 4 (Error) ──► FINISH FAIL  │
+  │                                                                 │
+  └─────────────────────────────────────────────────────────────────┘
+
+  Configurar en sp_add_jobstep:
+  - @on_success_action = 3 (next), 4 (goto), 1 (quit OK), 2 (quit fail)
+  - @on_success_step_id = X (si action = 4)
+  - @on_fail_action = similar
+  - @on_fail_step_id = X
+
+================================================================================
+                     SUBSISTEMAS DISPONIBLES
+================================================================================
+
+  TSQL               Script T-SQL (más común)
+  CmdExec            Comando del sistema operativo
+  PowerShell         Script PowerShell
+  SSIS               Integration Services package
+  SSAS               Analysis Services command
+  SSRS               Reporting Services
+
+================================================================================
+                     MEJORES PRÁCTICAS
+================================================================================
+
+  ✓ Naming Convention     Prefijo consistente: BancoDB_*
+  ✓ Descripción           Explicar propósito en cada job
+  ✓ Retry Logic           Configurar reintentos para red/disco
+  ✓ Notificaciones        Operator para jobs críticos
+  ✓ Logging               Step de log para troubleshooting
+  ✓ Horarios              Evitar solapar jobs pesados
+  ✓ Documentación         Mantener runbook actualizado
+  ✓ Monitoreo             Dashboard de estado regular
+
+================================================================================
+                     TROUBLESHOOTING RÁPIDO
+================================================================================
+
+  1. Job no aparece:
+     - Verificar que SQL Agent está corriendo
+     - Verificar permisos (SQLAgentUserRole mínimo)
+
+  2. Job no se ejecuta:
+     - Ver @enabled = 1 en job y schedule
+     - Verificar next_run_date en sysjobschedules
+
+  3. Job falla:
+     - Revisar sysjobhistory.message
+     - Verificar permisos de cuenta de servicio
+     - Probar T-SQL manualmente
+
+  4. Notificaciones no llegan:
+     - Verificar Database Mail configurado
+     - Verificar operator.email_address correcto
+     - Verificar @notify_level_email en job
+
+================================================================================
+              SQL Intermedio 2026 • Sesión 14 • CheatSheet
+================================================================================
